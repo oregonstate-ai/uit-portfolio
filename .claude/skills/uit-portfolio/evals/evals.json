@@ -1,0 +1,20 @@
+{
+  "skill_name": "uit-portfolio",
+  "evals": [
+    {
+      "id": 0,
+      "name": "brief-from-rough-idea",
+      "prompt": "I manage the university's digital signage across campus buildings. Right now every college runs its own signage system and it's a mess - different hardware, no central control, and security patches basically never happen. I want to propose a single enterprise digital signage platform so we can manage it centrally and keep it secure. I'm not sure on cost, or exactly which units would be in scope, or who would run it long term. How do I get this in front of UIT?",
+      "expected_output": "A filled Concept/Idea Brief .docx in the official template, plus a clear set of reviewer-anticipation questions the author still needs to answer (funding source/commitment, scope in/out, stakeholders, dependencies, post-go-live ownership, security/compliance). No invented facts; unknowns marked as placeholders. No pass/fail decision.",
+      "files": []
+    },
+    {
+      "id": 1,
+      "name": "charter-from-commented-brief",
+      "prompt": "My concept brief came back from the pipeline review with a bunch of reviewer comments. Can you help me turn it into the project charter and make sure I address their feedback?",
+      "expected_output": "Detects that the uploaded brief contains reviewer comments, switches to Charter mode, and produces a Project Charter .docx that visibly addresses each reviewer comment (scope in/out, dependencies, funding source/commitment, stakeholders, security). Unknowns become placeholders; no invented funding/dates; no approval decision.",
+      "files": [],
+      "files_note": "To run this eval, supply any real Concept Brief .docx that contains Word reviewer comments. Keep such files OUT of the public repo (they contain business data); store them in the local eval workspace only."
+    }
+  ]
+}
