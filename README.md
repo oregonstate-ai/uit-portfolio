@@ -52,17 +52,18 @@ python app.py                 # serves http://localhost:8000  (override with POR
 
 ### Required Claude skills
 
-Beyond `pip install`, five Anthropic skills must be installed under
-`~/.claude/skills/` — they are **hard requirements**, not optional helpers:
+Beyond `pip install`, the assistant relies on several Anthropic skills as **hard
+requirements**, not optional helpers:
 
-- `docx`, `pdf`, `pptx`, `xlsx` — read uploads and fill the Word template with the
-  matching skill instead of ad-hoc text extraction. Without `docx`, documents
-  cannot be generated and the app says so.
-- `claude-api` — grounds any Claude/Anthropic API guidance the assistant gives.
-
-The app symlinks all five into each project directory so the Claude Code subagent
-can load them, surfaces any that are missing at startup (`/api/version` →
-`missing_skills`), and shows a warning banner in the UI.
+- `docx`, `pdf`, `pptx`, `xlsx` — installed under `~/.claude/skills/`, these read
+  uploads and fill the Word template with the matching skill instead of ad-hoc
+  text extraction. Without `docx`, documents cannot be generated and the app says
+  so. The app symlinks these four into each project directory so the Claude Code
+  subagent can load them, surfaces any that are missing at startup
+  (`/api/version` → `missing_skills`), and shows a warning banner in the UI.
+- `claude-api` — built into the Claude Code CLI (no file to install); grounds any
+  Claude/Anthropic API guidance the assistant gives. Enforced via the app's prompt
+  preamble rather than a file check.
 
 Copy `.env.default` → `.env` to configure. The app auto-detects how to reach Claude:
 

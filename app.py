@@ -48,14 +48,18 @@ FILL_BRIEF = SKILL_DIR / "scripts" / "fill_brief.py"
 BRIEF_TEMPLATE = SKILL_DIR / "assets" / "ConceptBrief_Template.docx"
 CHARTER_TEMPLATE = SKILL_DIR / "assets" / "UIT_Charter_Scope_Statement_Template_v2.docx"
 
-# Anthropic helper skills the app relies on — ALL are HARD REQUIREMENTS. A Word
-# template must never be filled without `docx`; uploads must be read with their
-# matching skill (`pdf`/`pptx`/`xlsx`) rather than ad-hoc text extraction; and
-# `claude-api` grounds any Claude/Anthropic API guidance the model gives. Each is
-# symlinked into every project dir so the Claude Code subagent can load it.
+# Anthropic helper skills the app relies on — ALL are HARD REQUIREMENTS, but in
+# two flavors:
+#  • FILE_SKILLS are filesystem skills installed under ~/.claude/skills/. A Word
+#    template must never be filled without `docx`; uploads must be read with their
+#    matching skill (`pdf`/`pptx`/`xlsx`) rather than ad-hoc text extraction. These
+#    are existence-checked and symlinked into every project dir.
+#  • `claude-api` is a BUILT-IN Claude Code skill (no file on disk), so it can't be
+#    existence-checked or symlinked — it's enforced via the PREAMBLE, which tells
+#    the model to consult it for any Claude/Anthropic API guidance.
 GLOBAL_SKILLS_DIR = Path.home() / ".claude" / "skills"
-REQUIRED_SKILLS = ["docx", "pdf", "pptx", "xlsx", "claude-api"]
-HELPER_SKILLS = REQUIRED_SKILLS  # symlinked into each project's .claude/skills/
+FILE_SKILLS = ["docx", "pdf", "pptx", "xlsx"]
+HELPER_SKILLS = FILE_SKILLS  # symlinked into each project's .claude/skills/
 
 
 def _skill_installed(name: str) -> bool:
@@ -63,8 +67,9 @@ def _skill_installed(name: str) -> bool:
 
 
 def missing_skills() -> list[str]:
-    """Required skills that are not installed — the app is degraded if non-empty."""
-    return [s for s in REQUIRED_SKILLS if not _skill_installed(s)]
+    """File-backed skills that are not installed — the app is degraded if non-empty.
+    (`claude-api` is built into the CLI, so it is enforced via the PREAMBLE, not here.)"""
+    return [s for s in FILE_SKILLS if not _skill_installed(s)]
 
 
 def docx_skill_available() -> bool:
