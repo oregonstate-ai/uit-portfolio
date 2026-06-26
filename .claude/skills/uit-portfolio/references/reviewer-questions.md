@@ -33,7 +33,8 @@ plain question. These are the only questions to ask in **brief mode**.
 - **Desired outcomes.** What changes for the institution if this works? Push for a
   *result*, not a list of activities.
 - **Strategic alignment.** Which specific strategic-plan commitment or policy does
-  this advance? (A named goal, not "supports the university.")
+  this advance? (A named goal, not "supports the university.") Offer the author a
+  pick-list from `strategic-plan.md` rather than asking them to recall a goal.
 - **Directional scope.** Roughly what's included — and is this *adding something
   new* or *replacing/retiring* existing systems? Which units, broadly?
 - **Who's impacted / who should be at the table.** Which teams or partner units

@@ -26,7 +26,8 @@ All domain logic lives in `.claude/skills/uit-portfolio/`. The model reads the f
 2. `references/process-overview.md` — the four-stage governance process and hard boundaries
 3. `references/reviewer-questions.md` — the questions reviewers actually raise (the core value of the tool)
 4. `references/rubric.md` — per-section quality criteria used during interview and in the readiness summary
-5. `references/charter-fields.md` — charter template field map (used only in Charter mode)
+5. `references/strategic-plan.md` — OSU strategic-plan goals, presented as a pick-list for the Strategic Alignment section. **Currently a placeholder** between the `STRATEGIC-PLAN-CONTENT:START/END` markers; populate by running the OSU strategic plan PDF through the `pdf` skill and pasting the goal list as a pickable list. The skill falls back to an open-ended question until then.
+6. `references/charter-fields.md` — charter template field map (used only in Charter mode)
 
 **Two auto-detected modes:**
 - **Brief mode** (default, Stage 1): idea or early document → `ConceptBrief_Template.docx`

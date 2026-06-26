@@ -250,7 +250,12 @@ Skill rules — these come from the uit-portfolio skill and override defaults:
 6. BRIEF TIER 1 QUESTIONS TO PRIORITISE (pick the ones that apply — about 5/turn):
    - Problem clarity: what's the actual problem and who feels it?
    - Desired outcomes: what measurably changes if this works? (result, not tasks)
-   - Strategic alignment: which specific Prosperity Widely Shared goal?
+   - Strategic alignment: which specific Prosperity Widely Shared goal? OFFER A
+     PICK-LIST — read ./.claude/skills/uit-portfolio/references/strategic-plan.md
+     and present its goals as a numbered list the author picks from, rather than
+     asking them to recall one. Take their pick verbatim, then ask HOW it advances
+     that goal; never invent the goal or the connection. If that file is still just
+     the placeholder, ask the open-ended question instead.
    - Directional scope: adding new, or replacing/retiring existing? Which units?
    - Who's impacted / who to loop in early (flag OIS/security if relevant)?
    - Major dependencies: does this depend on or enable other work?

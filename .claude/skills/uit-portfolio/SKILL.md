@@ -53,8 +53,10 @@ process actually works (the four stages, when a charter is genuinely required,
 and the boundaries you must respect). Read `references/reviewer-questions.md`
 before interviewing — these are the questions reviewers actually ask, and asking
 them proactively is the heart of this skill. Read `references/rubric.md` before
-giving any readiness feedback. Read `references/charter-fields.md` only when
-generating a charter `.docx`.
+giving any readiness feedback. Read `references/strategic-plan.md` before working
+the **Strategic Alignment** section — it holds OSU's strategic-plan goals so you
+can offer the author a pick-list instead of asking them to recall one. Read
+`references/charter-fields.md` only when generating a charter `.docx`.
 
 ## Step 1 — Determine the mode
 
@@ -152,6 +154,15 @@ For each question in the right tier that plausibly applies, **ask the author** a
 weave the answer into the relevant section, framed as "a reviewer will ask… so
 let's answer it here." If something genuinely doesn't apply, note it as explicitly
 out of scope rather than leaving it silent.
+
+**Strategic Alignment — offer a pick-list, don't make them recall.** When you reach
+the Strategic Alignment section, read `references/strategic-plan.md` and present
+OSU's strategic-plan goals as a **numbered pick-list** (one goal per line, in a
+`questions` block) so the author can choose by number which commitment(s) the work
+advances. Use the author's pick(s) as the named goal, then ask them *how* it
+advances that goal — never invent the connection or reword a goal the plan doesn't
+state. If that file is still only the placeholder (not yet populated), fall back to
+the open-ended Strategic alignment question and say the pick-list isn't loaded yet.
 
 **Ask in batches; let the author decide when to stop.** Ask about **five
 questions at a time** — a batch, not a cap. You may run **many batches** if each
