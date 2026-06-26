@@ -48,15 +48,28 @@ FILL_BRIEF = SKILL_DIR / "scripts" / "fill_brief.py"
 BRIEF_TEMPLATE = SKILL_DIR / "assets" / "ConceptBrief_Template.docx"
 CHARTER_TEMPLATE = SKILL_DIR / "assets" / "UIT_Charter_Scope_Statement_Template_v2.docx"
 
-# Anthropic helper skills the app relies on for Office files. The `docx` skill is
-# REQUIRED — a Word template must never be filled without it loaded.
+# Anthropic helper skills the app relies on — ALL are HARD REQUIREMENTS. A Word
+# template must never be filled without `docx`; uploads must be read with their
+# matching skill (`pdf`/`pptx`/`xlsx`) rather than ad-hoc text extraction; and
+# `claude-api` grounds any Claude/Anthropic API guidance the model gives. Each is
+# symlinked into every project dir so the Claude Code subagent can load it.
 GLOBAL_SKILLS_DIR = Path.home() / ".claude" / "skills"
-HELPER_SKILLS = ["docx", "pdf", "pptx", "xlsx"]
+REQUIRED_SKILLS = ["docx", "pdf", "pptx", "xlsx", "claude-api"]
+HELPER_SKILLS = REQUIRED_SKILLS  # symlinked into each project's .claude/skills/
+
+
+def _skill_installed(name: str) -> bool:
+    return (GLOBAL_SKILLS_DIR / name / "SKILL.md").is_file()
+
+
+def missing_skills() -> list[str]:
+    """Required skills that are not installed — the app is degraded if non-empty."""
+    return [s for s in REQUIRED_SKILLS if not _skill_installed(s)]
 
 
 def docx_skill_available() -> bool:
     """True only if the Anthropic docx skill is installed and loadable."""
-    return (GLOBAL_SKILLS_DIR / "docx" / "SKILL.md").is_file()
+    return _skill_installed("docx")
 
 DATA_DIR = Path(os.environ.get("UIT_DATA_DIR", str(Path.home() / ".uit-portfolio")))
 PROJECTS_DIR = DATA_DIR / "projects"
@@ -134,7 +147,7 @@ Working directory rules (IMPORTANT, override conflicting guidance):
   library directly (no fill script exists for charters). Use the fill_below()
   helper pattern in ./.claude/skills/uit-portfolio/references/charter-fields.md.
   Name the output file "<short-name>_Charter.docx" and write it to ./out/.
-- The Anthropic helper skills `docx`, `pdf`, `pptx`, and `xlsx` are loaded.
+- The Anthropic skills `docx`, `pdf`, `pptx`, `xlsx`, and `claude-api` are loaded.
   ALWAYS read an uploaded file with its matching skill — never ad-hoc text
   extraction:
     • .docx → `docx` skill        • .pdf  → `pdf` skill
@@ -142,7 +155,9 @@ Working directory rules (IMPORTANT, override conflicting guidance):
   Use the `docx` skill for writing/filling Word documents too. Do NOT hand-edit
   raw OOXML. Only fall back to plain extraction if the matching skill is genuinely
   unavailable. If the `docx` skill is not available, do NOT fill or create the
-  Word template — tell the author and stop.
+  Word template — tell the author and stop. If anything you say touches the Claude
+  or Anthropic API (model ids, pricing, params), consult the `claude-api` skill
+  rather than answering from memory.
 - Give the document a short, descriptive `concept_title` — a few words a person
   would recognise (e.g. "Enterprise Digital Signage Platform"), NOT a sentence
   copied from the author's request.
@@ -448,12 +463,35 @@ def _humanize_tool(tool: str, inp: dict) -> str:
     return friendly.get(tool, f"{tool}…")
 
 
+def resolve_model() -> str:
+    """The model id to pass to `claude --model`, Bedrock-aware.
+
+    On Bedrock the identifier must be a full inference-profile id
+    (``global.anthropic.claude-opus-4-8``) — the first-party short alias
+    (``claude-opus-4-8``) is rejected with "model identifier is invalid". So:
+      1. An explicit UIT_CLAUDE_MODEL always wins.
+      2. Else, when pointed at Bedrock (CLAUDE_CODE_USE_BEDROCK), use the env's
+         ANTHROPIC_MODEL / ANTHROPIC_DEFAULT_OPUS_MODEL (already a full profile id),
+         falling back to the known global Opus profile.
+      3. Else (first-party API), the short alias is correct.
+    The ``[1m]`` suffix (1M-token context) is honored by the CLI for either form.
+    """
+    explicit = os.environ.get("UIT_CLAUDE_MODEL")
+    if explicit:
+        return explicit
+    if os.environ.get("CLAUDE_CODE_USE_BEDROCK"):
+        return (os.environ.get("ANTHROPIC_MODEL")
+                or os.environ.get("ANTHROPIC_DEFAULT_OPUS_MODEL")
+                or "global.anthropic.claude-opus-4-8[1m]")
+    return "claude-opus-4-8[1m]"
+
+
 async def stream_claude_cli(pid: str, prompt: str, first_turn: bool):
     """Run the Claude CLI in the project dir, streaming humanized events."""
     claude_bin = get_claude_bin()
     proj = _pdir(pid)
     # Opus with the 1M-token context window by default, for both turns.
-    model = os.environ.get("UIT_CLAUDE_MODEL", "claude-opus-4-8[1m]")
+    model = resolve_model()
     effort = os.environ.get("UIT_CLAUDE_EFFORT", "high")  # low|medium|high|xhigh|max
     cmd = [claude_bin, "-p", prompt, "--model", model, "--effort", effort,
            "--output-format", "stream-json", "--verbose",
@@ -711,6 +749,7 @@ async def version():
         "commit": _GIT_COMMIT,
         "demo": get_claude_bin() is None,
         "docx_skill": docx_skill_available(),
+        "missing_skills": missing_skills(),
         "contact": os.environ.get("CONTACT", ""),
         "coordinator": os.environ.get("PORTFOLIO_COORDINATOR", ""),
     })
@@ -789,8 +828,13 @@ async def upload(pid: str, file: UploadFile = File(...)):
     _save_meta(pid, meta)
     # NEVER auto-switch to charter here. We only report is_brief/has_comments so the
     # UI can ASK — the mode changes only via an explicit choice (set_mode).
+    # `suggested_mode` is the UI's *pre-selected* default for that ask, not a switch:
+    # a Concept Brief that came back WITH reviewer comments is one ready to charter,
+    # so charter is the default; a brief with no comments stays ambiguous (brief).
+    suggested_mode = "charter" if (is_brief and has_comments) else "brief"
     return JSONResponse({"uploads": _uploads(pid), "has_comments": has_comments,
-                         "is_brief": is_brief, "mode": meta.get("mode", "brief")})
+                         "is_brief": is_brief, "mode": meta.get("mode", "brief"),
+                         "suggested_mode": suggested_mode})
 
 
 @app.post("/api/projects/{pid}/mode")

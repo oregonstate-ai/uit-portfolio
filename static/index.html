@@ -721,17 +721,22 @@ async function doUpload(files){
       if(res.error) throw new Error(res.error);
       renderUploads(res.uploads);
       if(res.is_brief && MODE!=='charter'){
-        // It's an actual Concept Brief — ASK whether to charter it (default) or
-        // base another brief on it. Never switch on the user's behalf.
+        // It's an actual Concept Brief — ASK whether to charter it or base another
+        // brief on it. Never switch on the user's behalf. When it came back WITH
+        // reviewer comments the backend suggests charter, so we PRE-SELECT (mark
+        // primary) the charter choice; otherwise charter is offered without emphasis.
+        const charterDefault = res.suggested_mode === 'charter';
         const commented = res.has_comments ? ' (it has reviewer comments)' : '';
-        addBotChoice(`That looks like a **Concept Brief**${commented}. Do you want to build the **Charter** from it, or start another **Brief** based on it?`, [
-          {label:'Build the Charter', primary:true, onClick: async ()=>{
+        const lead = charterDefault
+          ? `That looks like a reviewed **Concept Brief**${commented} — ready to turn into a **Charter**. Build the Charter from it, or start another **Brief** based on it?`
+          : `That looks like a **Concept Brief**${commented}. Do you want to build the **Charter** from it, or start another **Brief** based on it?`;
+        const charterChoice = {label:'Build the Charter', primary:charterDefault, onClick: async ()=>{
             try{ await api('/api/projects/'+CURRENT+'/mode',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:'charter'})});
               setMode('charter'); addBot("Switched to **Charter mode** — I'll carry this brief forward and address each reviewer comment."); refreshSidebar();
             }catch(e){ showToast('Could not switch: '+e.message); }
-          }},
-          {label:'Keep building a Brief', onClick: ()=>{ addBot("Staying on the **Brief**. I'll use this upload as the starting point."); }},
-        ]);
+        }};
+        const briefChoice = {label:'Keep building a Brief', primary:!charterDefault, onClick: ()=>{ addBot("Staying on the **Brief**. I'll use this upload as the starting point."); }};
+        addBotChoice(lead, [charterChoice, briefChoice]);
       } else {
         addBot(`Got **${esc(file.name)}** — I'll mine it for anything that maps to the template so you don't retype it.`);
       }
@@ -759,9 +764,13 @@ ta.addEventListener('keydown', e=>{ if(e.key==='Enter' && !e.shiftKey){ e.preven
   const v = await api('/api/version');
   DEMO = v.demo;
   if(DEMO){ $('#livedot').classList.add('demo'); $('#statusline').textContent = 'Demo mode · scripted assistant (no backend configured)'; }
-  if(v.docx_skill === false){
+  if(v.missing_skills && v.missing_skills.length){
     $('#livedot').classList.add('demo');
-    $('#statusline').innerHTML = '⚠ The <b>docx</b> skill is not installed — documents cannot be generated. Add ~/.claude/skills/docx.';
+    const names = v.missing_skills.map(s=>'<b>'+esc(s)+'</b>').join(', ');
+    const docxGone = v.docx_skill === false;
+    $('#statusline').innerHTML = '⚠ Required skill'+(v.missing_skills.length>1?'s':'')+' not installed: '+names
+      + (docxGone ? ' — documents cannot be generated.' : '.')
+      + ' Add them under ~/.claude/skills/.';
   }
   goLanding();
 })();

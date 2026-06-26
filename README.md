@@ -6,11 +6,11 @@ interface, ending in a filled `.docx` in the official template.
 
 This repository has two parts:
 
-1. **The skill** (exists today) — a Claude skill that does the actual work:
-   interviews the author, anticipates reviewer questions, and generates the
-   document. It lives in [`.claude/skills/uit-portfolio/`](.claude/skills/uit-portfolio/).
-2. **The web app** (planned, to be built here) — a chat + wizard front end that
-   hosts the skill so non-technical staff can use it in a browser.
+1. **The skill** — a Claude skill that does the actual work: interviews the
+   author, anticipates reviewer questions, and generates the document. It lives
+   in [`.claude/skills/uit-portfolio/`](.claude/skills/uit-portfolio/).
+2. **The web app** (`app.py` + `static/index.html`) — a chat + wizard front end
+   that hosts the skill so non-technical staff can use it in a browser.
 
 ---
 
@@ -20,9 +20,10 @@ The skill is the brain of the whole tool. It guides an author — a UIT engineer
 or a non-technical business partner — from a rough idea or an uploaded document
 to a strong submission, then emits the official `.docx`.
 
-- **Two auto-detected modes:** a **Concept/Idea Brief** (Stage 1, the default),
-  or a **Project Charter** (Stage 2), detected when an uploaded brief contains
-  Word reviewer comments.
+- **Two modes:** a **Concept/Idea Brief** (Stage 1, the default), or a **Project
+  Charter** (Stage 2). When an uploaded brief contains Word reviewer comments the
+  app *suggests* charter mode (pre-selecting it), but it never switches on its
+  own — the author always confirms.
 - **Reviewer anticipation is the point.** It asks the questions UIT reviewers
   actually raise — scope in/out, stakeholders, funding commitment, dependencies,
   post-go-live ownership, security/compliance — *before* a reviewer has to.
@@ -48,6 +49,20 @@ The app lives **in this repository** (`app.py` + `static/index.html`), modeled o
 pip install -r requirements.txt
 python app.py                 # serves http://localhost:8000  (override with PORT=…)
 ```
+
+### Required Claude skills
+
+Beyond `pip install`, five Anthropic skills must be installed under
+`~/.claude/skills/` — they are **hard requirements**, not optional helpers:
+
+- `docx`, `pdf`, `pptx`, `xlsx` — read uploads and fill the Word template with the
+  matching skill instead of ad-hoc text extraction. Without `docx`, documents
+  cannot be generated and the app says so.
+- `claude-api` — grounds any Claude/Anthropic API guidance the assistant gives.
+
+The app symlinks all five into each project directory so the Claude Code subagent
+can load them, surfaces any that are missing at startup (`/api/version` →
+`missing_skills`), and shows a warning banner in the UI.
 
 Copy `.env.default` → `.env` to configure. The app auto-detects how to reach Claude:
 
