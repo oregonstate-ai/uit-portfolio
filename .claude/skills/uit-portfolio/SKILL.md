@@ -64,8 +64,8 @@ There are two modes, usually auto-detectable:
 
 - **Concept Brief mode** (default / Stage 1): the author has an idea or an early
   document and needs a brief.
-- **Charter mode** (Stage 2): the author has a brief that was **approved with
-  reviewer comments** and is ready to develop the charter.
+- **Charter mode** (Stage 2): the author has a brief that **came back from review
+  with reviewer comments** and is ready to develop the charter.
 
 **Only suggest the charter path when the upload is actually a Concept Brief.**
 The trigger is recognizing the **official brief template** in the upload — its
@@ -90,6 +90,13 @@ the brief, treat the upload as the starting point and continue. Only proceed in
 charter mode once the author has explicitly chosen it. If you can't tell, ask one
 plain question: *"Do you want to build the charter from this brief, or start a new
 concept brief?"* — and wait for their answer.
+
+Comments tell you the brief *went through* review — they don't tell you the
+outcome. Don't write "approved" (or any outcome) into the charter or your
+summary unless the author has confirmed it; until then, say "reviewed with
+comments" or mark it `[TBD — confirm Pipeline outcome with the author]`. A
+charter that asserts an approval that never happened is exactly the kind of
+fabricated commitment the hard rules exist to prevent.
 
 ## Step 2 — Ingest whatever they brought
 
@@ -234,8 +241,10 @@ have — omitted sections are left blank for the human.
 > `docx` skill), preserve the same rule — gray = label, white = answer.
 
 **Charter** — there's no script; fill `assets/UIT_Charter_Scope_Statement_Template_v2.docx`
-with python-docx using `references/charter-fields.md`. Carry the approved brief's
-content forward and explicitly address each reviewer comment.
+with python-docx (per the `docx` skill's guidance — never hand-edit raw OOXML)
+using `references/charter-fields.md`. Carry the reviewed brief's
+content forward and explicitly address each reviewer comment (and remember: the
+review *outcome* is not yours to assert — see Step 1).
 
 ## Step 5 — Deliver the readiness summary
 

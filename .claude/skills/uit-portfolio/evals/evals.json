@@ -6,15 +6,34 @@
       "name": "brief-from-rough-idea",
       "prompt": "I manage the university's digital signage across campus buildings. Right now every college runs its own signage system and it's a mess - different hardware, no central control, and security patches basically never happen. I want to propose a single enterprise digital signage platform so we can manage it centrally and keep it secure. I'm not sure on cost, or exactly which units would be in scope, or who would run it long term. How do I get this in front of UIT?",
       "expected_output": "A filled Concept/Idea Brief .docx in the official template, plus a clear set of reviewer-anticipation questions the author still needs to answer (funding source/commitment, scope in/out, stakeholders, dependencies, post-go-live ownership, security/compliance). No invented facts; unknowns marked as placeholders. No pass/fail decision.",
-      "files": []
+      "files": [],
+      "assertions": [
+        "Produces a .docx using the official Concept Brief template (template section anchors like CONCEPT DESCRIPTION / STRATEGIC ALIGNMENT / DEFINE SUCCESS present)",
+        "Author's unknowns (cost, in-scope units, long-term owner) appear as visible [TBD ...] placeholders, not invented answers",
+        "No fabricated facts: no dollar figures, vendor/product names, staff names, or dates that the author did not supply (the Request Date auto-filled with the current date is acceptable metadata, not a fabrication)",
+        "Transcript proactively asks Tier 1 reviewer-anticipation questions (problem/outcomes, strategic alignment, directional scope, stakeholders, dependencies, rough resource sense, prioritization driver)",
+        "Brief stays lightweight: does NOT ask Tier 2 charter-level questions (HECVAT, SLAs, itemized/recurring funding, backup-DR, per-team ROM)",
+        "Renders no decision: no 'approved', pass/fail, or priority-ranking language anywhere",
+        "Transcript ends with a readiness summary in the rubric format (Strong / Tighten / Missing / Open placeholders)"
+      ]
     },
     {
       "id": 1,
       "name": "charter-from-commented-brief",
       "prompt": "My concept brief came back from the pipeline review with a bunch of reviewer comments. Can you help me turn it into the project charter and make sure I address their feedback?",
-      "expected_output": "Detects that the uploaded brief contains reviewer comments, switches to Charter mode, and produces a Project Charter .docx that visibly addresses each reviewer comment (scope in/out, dependencies, funding source/commitment, stakeholders, security). Unknowns become placeholders; no invented funding/dates; no approval decision.",
+      "expected_output": "Detects that the uploaded brief contains reviewer comments, proceeds in Charter mode as the author requested, and produces a Project Charter .docx that visibly addresses each reviewer comment (scope in/out, dependencies, funding source/commitment, stakeholders, security). Unknowns become placeholders; no invented funding/dates; no approval decision.",
       "files": [],
-      "files_note": "To run this eval, supply any real Concept Brief .docx that contains Word reviewer comments. Keep such files OUT of the public repo (they contain business data); store them in the local eval workspace only."
+      "files_note": "To run this eval, supply any real Concept Brief .docx that contains Word reviewer comments. Keep such files OUT of the public repo (they contain business data); store them in the local eval workspace only.",
+      "assertions": [
+        "Detects the reviewer comments in the uploaded brief and proceeds in Charter mode — with consent coming from the author's request in the prompt, not from the comments (comments alone must never trigger a mode switch)",
+        "Produces a filled Project Charter .docx from the official charter template",
+        "Maps every reviewer comment from the brief to where the charter addresses it",
+        "Charter scope explicitly lists what is OUT of scope, not only what is in",
+        "Unconfirmed funding figures and dates appear as [TBD ...] placeholders, never asserted as fact",
+        "Data classification / compliance regime is addressed explicitly in the charter (stated, or a visible [TBD — confirm with OIS] placeholder)",
+        "Does not assert the Pipeline review outcome (e.g. 'approved to advance') as fact — the prompt only says the brief 'came back with comments'; the charter/transcript must hedge ('reviewed with comments') or mark the outcome [TBD] unless the author confirmed it",
+        "Renders no decision: no 'approved', pass/fail, or priority-ranking language anywhere"
+      ]
     }
   ]
 }

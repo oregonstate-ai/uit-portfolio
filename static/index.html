@@ -512,7 +512,7 @@ function inline(s){ return esc(s).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>'
 
 function mdLite(t){
   // Pull fenced ```questions blocks out first so questions render in their own
-  // highlighted panel, separate from the assistant's commentary (max 3 shown).
+  // highlighted panel, separate from the assistant's commentary (max 5 shown).
   const qblocks = [];
   t = t.replace(/```questions\s*\n([\s\S]*?)```/g, (m, body)=>{
     const items = body.split('\n').map(s=>s.trim()).filter(Boolean).slice(0,5);
@@ -633,7 +633,7 @@ async function send(){
         handleEvent(ev, data);
       }
     }
-  }catch(e){ ensureBot(); botBubble.innerHTML = mdLite('⚠ Connection error: '+e.message); }
+  }catch(e){ ensureBot(); botText += (botText?'\n\n':'')+'⚠ Connection error: '+e.message; botBubble.innerHTML = mdLite(botText); }
   finally{ clearActivity(); setBusy(false); $('#console-live').classList.remove('on'); refreshSidebar(); $('#input').focus(); }
 
   function handleEvent(ev, data){

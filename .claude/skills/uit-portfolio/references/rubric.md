@@ -10,17 +10,18 @@ Strong, name the specific gap and suggest the concrete addition that would fix
 it. Be specific ("Outcomes lists activities, not measurable results — add a
 target like 'reduce X by Y%'") rather than generic ("add more detail").
 
+This file is the **scoring lens**; the questions to *ask* the author live in
+`reviewer-questions.md`. When a criterion below scores weak, that file has the
+interview question that fixes it — don't restate questions here.
+
 ## Cross-cutting signals reviewers reward
 
-- **Specificity over adjectives.** "Improves efficiency" is weak; "cuts manual
-  reconciliation from ~8 hrs/week to near-zero" is strong.
-- **Quantify the status quo.** A problem stated with a baseline number — today's
-  cost, support volume, FTE overhead, growth rate — is far stronger than an
-  unquantified claim. "How do we know demand is rising?" is a question a baseline
-  pre-empts. Order-of-magnitude is enough; *some* evidence beats none.
-- **Describe the current state concretely.** If a reviewer has to write "assuming
-  this is X…", the draft was too vague. Spell out today's tool/script/manual
-  process so no one has to guess what's being changed.
+- **Specificity and evidence over adjectives.** "Improves efficiency" is weak;
+  "cuts manual reconciliation from ~8 hrs/week to near-zero" is strong. Two
+  concrete forms of this: a **baseline number** for today's pain (cost, volume,
+  FTE, growth — order-of-magnitude is enough), and a **concrete description of
+  the current state** (today's tool/script/manual process). If a reviewer would
+  have to write "assuming this is X…" or "how do we know?", the draft is too vague.
 - **Outcomes vs. activities.** Reviewers want the *result* (what changes for the
   institution), not a list of tasks.
 - **Honest scope and risk.** A clear "what's out of scope" and a named risk with
@@ -42,8 +43,11 @@ target like 'reduce X by Y%'") rather than generic ("add more detail").
   it (risk, cost, missed opportunity). Weak: restates the benefits of doing it.
 - **Risks** — Strong: real risks that could impede the effort. Weak: "none" or
   trivial risks.
-- **Define Success** — Strong: an observable end-state someone could verify.
-  Weak: circular ("success is completing the project").
+- **Define Success** — Strong: an observable end-state someone could verify —
+  a deliverable or target ("backup solution implemented with documented SOPs and
+  an approved RACI"), not a feeling ("the environment is healthier"). Weak:
+  circular ("success is completing the project") or aspirational/unmeasurable
+  ("unmeasurable success criteria, not OKRs" is a real reviewer comment).
 - **Proposed Solution** — Strong: a directional approach, explicitly not a final
   design. Weak: either empty or an over-specified build spec (wrong altitude).
 - **Timeline / Desired Completion** — present and plausible; flag if missing.
@@ -60,7 +64,9 @@ target like 'reduce X by Y%'") rather than generic ("add more detail").
 - **Risks of Not Fulfilling Objectives** — concrete institutional consequences.
 - **Deliverables** — high-level products, not a task list.
 - **Scope** — explicitly states what is **and is not** addressed. Missing the
-  "not" half is the single most common charter weakness.
+  "not" half is the single most common charter weakness. Also positions the work
+  within the systems portfolio: names required integrations and whether it
+  replaces or coexists with what exists ("stand-alone system" draws comments).
 - **Risks & Dependencies** — named, with at least a mitigation direction.
 - **Impact on Stakeholders / Service Desk / other UIT teams** — Strong: names
   the teams and gives a rough order-of-magnitude (ROM) ask per team. Reviewers
@@ -74,7 +80,10 @@ target like 'reduce X by Y%'") rather than generic ("add more detail").
 - **Funding (implementation + operational)** — Strong: separates one-time vs.
   recurring and notes the funding year(s). Weak: a single lump or "TBD" with no
   owner to confirm. Never fabricate figures — elicit or mark as placeholder.
-- **Accountability (sponsors, PM, SMEs)** — named roles, not blanks.
+- **Accountability (sponsors, PM, SMEs)** — named roles, not blanks. When several
+  units share the outcome, a lone sponsor is usually insufficient — reviewers look
+  for a steering committee and one clear decision authority (a pending leadership
+  transition sharpens this question).
 - **Milestones / Timelines** — phased with proposed start/end dates.
 
 ## Patterns observed in real submissions
@@ -82,9 +91,6 @@ target like 'reduce X by Y%'") rather than generic ("add more detail").
 Concrete tells that separate strong submissions from weak ones, seen repeatedly
 across approved and commented examples. Coach toward the first half of each pair.
 
-- **Cite a specific institutional goal, not a generic one.** "Aligns with [the
-  named strategic goal / a concrete target metric]" reads far stronger than
-  "supports the university's mission."
 - **Keep Outcomes and Proposed Solution distinct.** A common weakness is pasting
   the same bullets into both. Outcomes = the *results/capabilities* delivered;
   Proposed Solution = the *approach* to get there. If they're identical, one of
@@ -100,22 +106,9 @@ across approved and commented examples. Coach toward the first half of each pair
   Reviewers cross-check and flag any group named in prose but missing from the list.
 - **Be honest about unsecured funding and real risks.** "Funding not yet secured"
   stated up front reads as mature, not weak — hiding it invites a harder comment.
-- **Objectives in business terms, as crisp bullets**, each something a reviewer
-  could later verify.
-- **Success must be measurable, not aspirational.** "Unmeasurable success
-  criteria, not OKRs" is a real comment — each success statement should be a
-  verifiable deliverable or target ("backup solution implemented with documented
-  SOPs and a CISO-approved RACI"), not a feeling ("the environment is healthier").
 - **Put content in the right section.** Cost-of-inaction belongs in Benefits /
   risk-of-not-doing, not in Outcomes; integration requirements aren't risks.
   Reviewers flag misplaced content ("this is what happens if you don't do this").
-- **Cross-unit work needs governance, not just a sponsor.** When several units
-  share the outcome, a single sponsor is usually insufficient — a steering
-  committee and one clear decision authority are what make it work, and reviewers
-  say so directly. A pending leadership transition sharpens the question of who decides.
-- **Position it within the portfolio, not as an island.** Strong submissions name
-  the systems they must integrate with and whether they replace or coexist with
-  what exists; "stand-alone system" is a phrase that draws comments.
 - **Let the brief stay light — reviewers defer detail to the charter themselves.**
   It's fine, and correct, to answer a deep question with "that belongs in the
   charter." Reviewers explicitly push detail down a stage; don't let a brief bloat

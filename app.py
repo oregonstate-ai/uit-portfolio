@@ -148,18 +148,21 @@ Working directory rules (IMPORTANT, override conflicting guidance):
   ./out/content.json. The app uses it to title the project, so the sidebar stops
   saying "New Concept Brief" once you have enough to name it. Refine it later if
   the project's focus shifts.
-- For a CHARTER, fill the charter template (path above) using the python-docx
-  library directly (no fill script exists for charters). Use the fill_below()
-  helper pattern in ./.claude/skills/uit-portfolio/references/charter-fields.md.
+- For a CHARTER, fill the charter template (path above) with the python-docx
+  library (no fill script exists for charters) — that is the tool the `docx`
+  skill itself prescribes, so follow that skill's guidance and never hand-edit
+  raw OOXML. Use the fill_below() helper pattern in
+  ./.claude/skills/uit-portfolio/references/charter-fields.md.
   Name the output file "<short-name>_Charter.docx" and write it to ./out/.
 - The Anthropic skills `docx`, `pdf`, `pptx`, `xlsx`, and `claude-api` are loaded.
   ALWAYS read an uploaded file with its matching skill — never ad-hoc text
   extraction:
     • .docx → `docx` skill        • .pdf  → `pdf` skill
     • .pptx → `pptx` skill        • .xlsx → `xlsx` skill
-  Use the `docx` skill for writing/filling Word documents too. Do NOT hand-edit
-  raw OOXML. Only fall back to plain extraction if the matching skill is genuinely
-  unavailable. If the `docx` skill is not available, do NOT fill or create the
+  Follow the `docx` skill's guidance for writing/filling Word documents too
+  (fill_brief.py and the python-docx charter path both conform to it). Do NOT
+  hand-edit raw OOXML. Only fall back to plain extraction if the matching skill
+  is genuinely unavailable. If the `docx` skill is not available, do NOT fill or create the
   Word template — tell the author and stop. If anything you say touches the Claude
   or Anthropic API (model ids, pricing, params), consult the `claude-api` skill
   rather than answering from memory.
@@ -186,7 +189,11 @@ Skill rules — these come from the uit-portfolio skill and override defaults:
      truly unknowable right now — and even then, ask the author first if they
      might know.
 
-2. NEVER decide. No "approved," no pass/fail, no priority ranking.
+2. NEVER decide. No "approved," no pass/fail, no priority ranking. That includes
+   the Pipeline review outcome: reviewer comments in a brief only prove it was
+   *reviewed* — never write "approved" (or any outcome) into a charter or summary
+   unless the author confirmed it; say "reviewed with comments" or mark it
+   "[TBD — confirm Pipeline outcome with the author]".
 
 3. TIER DISCIPLINE — which questions you ask depends on the mode:
    - BRIEF MODE: ask only Tier 1 questions (lightweight, directional).
@@ -252,10 +259,10 @@ Skill rules — these come from the uit-portfolio skill and override defaults:
    - Desired outcomes: what measurably changes if this works? (result, not tasks)
    - Strategic alignment: which specific Prosperity Widely Shared goal? OFFER A
      PICK-LIST — read ./.claude/skills/uit-portfolio/references/strategic-plan.md
-     and present its goals as a numbered list the author picks from, rather than
-     asking them to recall one. Take their pick verbatim, then ask HOW it advances
-     that goal; never invent the goal or the connection. If that file is still just
-     the placeholder, ask the open-ended question instead.
+     and present its THREE GOALS as a pick-list (they fit one questions block),
+     rather than asking the author to recall one. Take their pick verbatim, then
+     sharpen it with the matching action or 2030 target from that file and ask HOW
+     the work advances it; never invent the goal or the connection.
    - Directional scope: adding new, or replacing/retiring existing? Which units?
    - Who's impacted / who to loop in early (flag OIS/security if relevant)?
    - Major dependencies: does this depend on or enable other work?
@@ -496,7 +503,8 @@ def resolve_model() -> str:
     return "claude-opus-4-8[1m]"
 
 
-async def stream_claude_cli(pid: str, prompt: str, first_turn: bool):
+async def stream_claude_cli(pid: str, prompt: str, first_turn: bool,
+                            _retrying: bool = False):
     """Run the Claude CLI in the project dir, streaming humanized events."""
     claude_bin = get_claude_bin()
     proj = _pdir(pid)
@@ -521,13 +529,16 @@ async def stream_claude_cli(pid: str, prompt: str, first_turn: bool):
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
         cwd=str(proj), env=env,
     )
-    yield _trace("meta", text=f"$ claude --model {model} --effort {effort}"
-                              + (" --continue" if not first_turn else ""))
+    # Drain stderr concurrently — an undrained PIPE deadlocks the CLI once it
+    # writes more than the pipe buffer (~64KB) of warnings/progress noise.
+    stderr_task = asyncio.ensure_future(proc.stderr.read())
 
     streamed_text = ""  # everything the user saw streamed live
     result_text = ""    # the final `result` event (usually a duplicate of the last block)
     buf = ""
     try:
+        yield _trace("meta", text=f"$ claude --model {model} --effort {effort}"
+                                  + (" --continue" if not first_turn else ""))
         while True:
             chunk = await asyncio.wait_for(proc.stdout.read(512), timeout=600)
             if not chunk:
@@ -572,16 +583,46 @@ async def stream_claude_cli(pid: str, prompt: str, first_turn: bool):
                         result_text = rt
     except asyncio.TimeoutError:
         proc.kill()
+        stderr_task.cancel()
         yield _trace("meta", text="✕ timed out after 600s")
         yield _sse("error", "Claude timed out.")
         return
+    except asyncio.CancelledError:
+        # Client disconnected mid-stream — don't orphan the CLI process or
+        # leak the stderr drain task.
+        proc.kill()
+        stderr_task.cancel()
+        raise
 
     await proc.wait()
     if proc.returncode != 0:
-        err = (await proc.stderr.read()).decode("utf-8", errors="replace")
+        try:
+            # Bounded wait: a grandchild that inherited the stderr pipe could
+            # keep it open past our process's exit and hang this await forever.
+            err = (await asyncio.wait_for(stderr_task, timeout=5)).decode(
+                "utf-8", errors="replace")
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            err = ""
+        # A --continue against a session that no longer exists (server restart,
+        # reopened old project) fails before producing any output. Fall back to
+        # a fresh session once, re-grounding the model in the on-disk state.
+        if not first_turn and not _retrying and not streamed_text.strip():
+            yield _trace("meta", text=f"✕ exit {proc.returncode} — no session to "
+                                      "continue; retrying fresh")
+            fresh = (PREAMBLE
+                     + "[Context: this resumes an existing project, but the prior "
+                       "CLI session is gone (e.g. after a server restart). Re-read "
+                       "./out/content.json for the current document state and "
+                       "./uploads/ for the author's files before responding.]\n\n"
+                     + prompt)
+            async for ev in stream_claude_cli(pid, fresh, first_turn=True,
+                                              _retrying=True):
+                yield ev
+            return
         yield _trace("meta", text=f"✕ exit {proc.returncode}")
         yield _sse("error", f"Claude exited {proc.returncode}: {err[:400]}")
         return
+    stderr_task.cancel()
     yield _trace("meta", text="✓ completed")
 
     # The text was already streamed live; persist it but do NOT re-emit it.
@@ -592,12 +633,13 @@ async def stream_claude_cli(pid: str, prompt: str, first_turn: bool):
 
 # --- Demo mode -------------------------------------------------------------
 
+_DEMO_TODAY = time.localtime()
 _DEMO_BASE = {
     "concept_title": "Enterprise Digital Signage Platform",
     "requestor": "[your name]",
     "requestor_title_unit": "University IT",
     "sponsor": "[TBD — confirm sponsor]",
-    "request_date": time.strftime("%b %-d, %Y") if hasattr(time, "strftime") else "",
+    "request_date": f"{time.strftime('%b', _DEMO_TODAY)} {_DEMO_TODAY.tm_mday}, {_DEMO_TODAY.tm_year}",
     "concept_description": ("Each college currently runs its own digital-signage hardware with no "
                             "central control, so security patches lag for months. This proposes a "
                             "single enterprise platform managed by one team."),

@@ -108,8 +108,7 @@ must be visibly answered somewhere in the charter.
 ### Operations after go-live (frequently missing)
 - **Who owns** technical management and data/quality stewardship after launch?
 - **Ongoing processes, standards, governance**; what use/data is **eligible vs not**?
-- **Change-management** plan to get multiple teams using it the *same* way, with
-  process owners engaged early.
+  (The people side — OCM, comms, support load — has its own subsection below.)
 
 ### Security, compliance, and risk surface
 - **Data classification — name it first.** What classification of data does this
@@ -148,7 +147,8 @@ must be visibly answered somewhere in the charter.
 
 ### Change management, communications, and support load
 - Reviewers expect a named **OCM / communications plan**: who is affected, how
-  they're informed and trained, and how this lands against any concurrent
+  they're informed and trained, how multiple teams end up using it the *same*
+  way (process owners engaged early), and how this lands against any concurrent
   onboarding/enrollment process.
 - **Support / Service Desk impact:** what new support calls will this generate and
   how are they handled? Is there a **fallback path** when the new flow fails for a
