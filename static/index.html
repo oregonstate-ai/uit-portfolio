@@ -111,6 +111,9 @@ body{font-family:var(--font-body);color:var(--ink);background:var(--paper);-webk
 .mini-step .ms.on .d{background:var(--orange);border-color:var(--orange);color:#fff}
 .mini-step .arrow{color:var(--line-strong)}
 .topbar .status{display:flex;align-items:center;gap:8px;font-size:.78rem;color:var(--ink-soft);font-weight:500}
+/* live cost pill — running $ estimate of the analysis, next to the status */
+.cost-pill{display:inline-flex;align-items:center;font-family:var(--font-mono);font-size:.72rem;font-weight:500;font-variant-numeric:tabular-nums;padding:3px 9px;border-radius:20px;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink-soft);transition:.2s}
+.cost-pill.live{border-color:var(--orange-line);background:var(--orange-tint);color:var(--orange-deep)}
 .dotlive{width:7px;height:7px;border-radius:50%;background:var(--pine);box-shadow:0 0 0 3px rgba(63,107,58,.18);animation:pulse 2s infinite}
 .dotlive.demo{background:var(--gold);box-shadow:0 0 0 3px rgba(201,138,26,.18)}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
@@ -284,6 +287,15 @@ body{font-family:var(--font-body);color:var(--ink);background:var(--paper);-webk
 .sec p{font-family:var(--font-display);font-size:.92rem;line-height:1.5;margin:0;color:#2c241d;white-space:pre-wrap}
 .tbd{background:rgba(201,138,26,.16);border-bottom:1.5px dashed var(--gold);color:#7a5610;font-family:var(--font-mono);font-size:.78rem;padding:0 3px;border-radius:2px}
 .doc-empty{text-align:center;color:var(--ink-faint);font-family:var(--font-display);font-style:italic;padding:50px 20px}
+/* open-items checklist — every [TBD] a reviewer would flag, surfaced from content.json */
+.open-items{margin:24px 0 4px;border:1px solid var(--gold);border-radius:11px;overflow:hidden;background:rgba(201,138,26,.07)}
+.open-items h4{display:flex;align-items:center;gap:7px;margin:0;padding:9px 14px;font-family:var(--font-mono);font-size:.62rem;letter-spacing:.13em;text-transform:uppercase;color:#7a5610;background:rgba(201,138,26,.14);border-bottom:1px solid var(--gold)}
+.open-items h4 .cnt{margin-left:auto;background:var(--gold);color:#fff;border-radius:20px;padding:1px 8px;font-size:.62rem}
+.oi{display:flex;gap:10px;padding:9px 14px;font-size:.82rem;line-height:1.4;align-items:flex-start}
+.oi+.oi{border-top:1px dashed rgba(201,138,26,.4)}
+.oi .oi-sec{flex:none;font-family:var(--font-mono);font-size:.62rem;letter-spacing:.04em;text-transform:uppercase;color:#7a5610;min-width:96px;padding-top:2px}
+.oi .oi-txt{color:var(--ink-soft)}
+.open-items .oi-foot{padding:8px 14px;font-size:.74rem;color:var(--ink-soft);background:rgba(201,138,26,.05);border-top:1px dashed rgba(201,138,26,.4)}
 
 .toast{position:fixed;right:26px;bottom:26px;z-index:300;background:var(--ink);color:#fff;padding:13px 17px;border-radius:11px;box-shadow:var(--shadow-md);display:flex;align-items:center;gap:11px;font-size:.86rem;transform:translateY(140%);opacity:0;transition:.4s cubic-bezier(.2,.8,.2,1)}
 .toast.show{transform:none;opacity:1}
@@ -362,7 +374,7 @@ body{font-family:var(--font-body);color:var(--ink);background:var(--paper);-webk
         <span class="arrow">→</span>
         <div class="ms" id="ms-charter"><span class="d">2</span> Charter</div>
       </div>
-      <div class="status"><span class="dotlive" id="livedot"></span> <span id="statusline">Working in the official template</span></div>
+      <div class="status"><span class="cost-pill" id="costpill" style="display:none"></span><span class="dotlive" id="livedot"></span> <span id="statusline">Working in the official template</span></div>
     </div>
 
     <div class="progress-bar hidden" id="progress-bar"><div class="track"></div></div>
@@ -429,6 +441,8 @@ let MODE = 'brief';
 let DEMO = false;
 let BUSY = false;
 let TRACE = [];           // raw activity lines for the live console (per turn)
+let currentCost = null;   // cumulative $ for this project session (null = no data yet)
+let costBase = 0;         // cost carried from earlier turns in this session
 
 // ---------- view nav ----------
 function show(view){
@@ -484,6 +498,7 @@ async function delProject(id){
 async function openProject(id){
   CURRENT = id;
   show('workspace');
+  currentCost = null; costBase = 0; renderCost();  // cost is per open session
   const p = await api('/api/projects/'+id);
   MODE = p.mode;
   setMode(MODE);
@@ -579,6 +594,7 @@ async function send(){
   const text = $('#input').value.trim();
   if(!text) return;
   addMe(text); $('#input').value=''; $('#input').style.height='auto';
+  costBase = currentCost || 0;  // accumulate this turn's spend onto the session total
   setBusy(true);
   TRACE = []; $('#console-live').classList.add('on'); renderConsole();  // live-only: reset the console each turn
 
@@ -619,6 +635,12 @@ async function send(){
   try{
     const resp = await fetch('/api/projects/'+CURRENT+'/message', {
       method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({text})});
+    if(resp.status===409){
+      // Another turn (e.g. a second tab) is already running for this project.
+      const e=await resp.json().catch(()=>({})); showToast(e.error||'A response is already in progress.');
+      $('#input').value=text;  // restore so they can resend once it finishes
+      return;  // finally{} clears the activity panel and re-enables input
+    }
     if(!resp.ok){ const e=await resp.json().catch(()=>({error:resp.statusText})); throw new Error(e.error||resp.statusText); }
     const reader = resp.body.getReader(); const dec = new TextDecoder();
     let buf='';
@@ -639,6 +661,7 @@ async function send(){
   function handleEvent(ev, data){
     if(ev==='status'||ev==='activity'){ setActivity(data); }
     else if(ev==='trace'){ pushTrace(JSON.parse(data)); }
+    else if(ev==='cost'){ const usd=parseFloat(data); if(!isNaN(usd)){ currentCost = costBase + usd; renderCost(); } }
     else if(ev==='chunk'){ clearActivity(); ensureBot(); botText += data; botBubble.innerHTML = mdLite(botText); scrollChat(); }
     else if(ev==='doc'){ const d=JSON.parse(data); updateDoc(d); }
     else if(ev==='preview'){ renderPreview(JSON.parse(data)); }
@@ -676,6 +699,22 @@ function setBusy(b){
   $('#sendbtn').disabled=b;
   $('#progress-bar').classList.toggle('hidden', !b);
   $('#input').style.opacity = b ? '.6' : '';
+  renderCost();  // pill is orange/"live" while busy, muted when idle
+}
+
+// Coarse display so the counter doesn't flicker: 10-cent steps below $1,
+// whole-dollar steps from $1 up (as requested).
+function formatCost(usd){
+  if(usd>=1) return '$'+Math.floor(usd);
+  return '$'+(Math.floor(usd*10)/10).toFixed(2);
+}
+function renderCost(){
+  const pill=$('#costpill');
+  if(currentCost===null){ pill.style.display='none'; return; }
+  pill.style.display='inline-flex';
+  pill.textContent=formatCost(currentCost);
+  pill.classList.toggle('live', BUSY);
+  pill.title='Estimated cost of this analysis so far';
 }
 
 // ---------- document pane ----------
@@ -704,6 +743,13 @@ function renderPreview(pv){
     h += '<div class="doc-grid">'+pv.fields.map(f=>`<div class="fld"><div class="k">${esc(f.label)}</div><div class="v">${tbd(f.value)}</div></div>`).join('')+'</div>';
   }
   h += (pv.sections||[]).map(s=>`<div class="sec"><h4>${esc(s.label)}</h4><p>${tbd(s.value)}</p></div>`).join('');
+  if(pv.open_items && pv.open_items.length){
+    h += `<div class="open-items"><h4>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+        Open items — a reviewer will ask about these<span class="cnt">${pv.open_items.length}</span></h4>`
+      + pv.open_items.map(o=>`<div class="oi"><span class="oi-sec">${esc(o.section)}</span><span class="oi-txt">${esc(o.text)}</span></div>`).join('')
+      + `<div class="oi-foot">Each is a blank the author still needs to fill — answer it in chat and it clears here.</div></div>`;
+  }
   $('#docbody').innerHTML = h;
 }
 function tbd(v){ return esc(v).replace(/\[TBD[^\]]*\]/g, m=>`<span class="tbd">${m}</span>`).replace(/\n/g,'<br>'); }

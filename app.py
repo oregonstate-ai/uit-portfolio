@@ -322,6 +322,32 @@ def _save_messages(pid: str, msgs: list):
     (_pdir(pid) / "messages.json").write_text(json.dumps(msgs, indent=2))
 
 
+def _write_interview_log(pid: str):
+    """Mirror the full transcript into out/interview-log.md so a turn digest
+    survives even when the live CLI --continue session is gone (server restart,
+    reopened old project). The retry-fresh path points the model at this file, so
+    interview answers that never made it into a section aren't lost on recovery.
+    Regenerated wholesale from messages.json each turn — idempotent, always
+    complete, no incremental-append drift."""
+    msgs = _load_messages(pid)
+    if not msgs:
+        return
+    lines = [
+        "# Interview log",
+        "",
+        "_Verbatim conversation so far. If the live session was lost, read this to",
+        "recover the author's answers (including any not yet folded into a section)",
+        "before continuing — do not re-ask what they already told you._",
+        "",
+    ]
+    for m in msgs:
+        who = "Author" if m.get("role") == "user" else "Assistant"
+        lines += [f"## {who}", (m.get("text") or "").strip(), ""]
+    out = _pdir(pid) / "out"
+    out.mkdir(exist_ok=True)
+    (out / "interview-log.md").write_text("\n".join(lines))
+
+
 def _link_skill(skdir: Path, name: str, src: Path):
     dst = skdir / name
     if dst.exists() or dst.is_symlink():
@@ -410,6 +436,25 @@ def _project_summary(pid: str) -> dict:
     }
 
 
+# Matches the visible "[TBD — confirm with <who>]" placeholders the skill leaves
+# in the content map. Used to surface every open item a reviewer would flag.
+_TBD_RE = re.compile(r"\[TBD[^\]]*\]")
+
+
+def _open_items(c: dict) -> list[dict]:
+    """Every unresolved [TBD ...] placeholder in the content map, with the
+    section it sits in — this is the "a reviewer will ask about these" checklist
+    the doc pane renders. Derived purely from content.json; no skill change."""
+    label_map = dict(FIELD_LABELS + SECTION_LABELS)
+    label_map["concept_title"] = "Concept Title"
+    items = []
+    for k in ["concept_title", *(k for k, _ in FIELD_LABELS), *(k for k, _ in SECTION_LABELS)]:
+        val = str(c.get(k, ""))
+        for m in _TBD_RE.findall(val):
+            items.append({"section": label_map.get(k, k), "text": m})
+    return items
+
+
 def build_preview(pid: str) -> dict:
     """Structured preview for the document pane, from out/content.json."""
     c = _content_map(pid)
@@ -423,6 +468,7 @@ def build_preview(pid: str) -> dict:
         "title": c.get("concept_title", "").strip() or meta.get("title", "Untitled"),
         "fields": fields,
         "sections": sections,
+        "open_items": _open_items(c),
         "version": meta.get("version", 0),
         "empty": not (fields or sections),
     }
@@ -480,6 +526,18 @@ def _humanize_tool(tool: str, inp: dict) -> str:
     return friendly.get(tool, f"{tool}…")
 
 
+def _ensure_1m(model: str) -> str:
+    """Request the 1M-token context window (``[1m]`` suffix) for the Opus and
+    Fable families, which support it — whatever form the id arrived in (short
+    first-party alias or full Bedrock inference-profile). Idempotent, and a no-op
+    for models that don't take the suffix (e.g. Sonnet/Haiku) or that already
+    carry it. The CLI honors ``[1m]`` on either the alias or the profile id."""
+    low = (model or "").lower()
+    if ("opus" in low or "fable" in low) and "[1m]" not in low:
+        return model + "[1m]"
+    return model
+
+
 def resolve_model() -> str:
     """The model id to pass to `claude --model`, Bedrock-aware.
 
@@ -491,16 +549,68 @@ def resolve_model() -> str:
          ANTHROPIC_MODEL / ANTHROPIC_DEFAULT_OPUS_MODEL (already a full profile id),
          falling back to the known global Opus profile.
       3. Else (first-party API), the short alias is correct.
-    The ``[1m]`` suffix (1M-token context) is honored by the CLI for either form.
+    Whatever the source, the Opus/Fable families are pinned to the ``[1m]``
+    (1M-token context) variant via _ensure_1m.
     """
     explicit = os.environ.get("UIT_CLAUDE_MODEL")
     if explicit:
-        return explicit
+        return _ensure_1m(explicit)
     if os.environ.get("CLAUDE_CODE_USE_BEDROCK"):
-        return (os.environ.get("ANTHROPIC_MODEL")
-                or os.environ.get("ANTHROPIC_DEFAULT_OPUS_MODEL")
-                or "global.anthropic.claude-opus-4-8[1m]")
-    return "claude-opus-4-8[1m]"
+        return _ensure_1m(
+            os.environ.get("ANTHROPIC_MODEL")
+            or os.environ.get("ANTHROPIC_DEFAULT_OPUS_MODEL")
+            or "global.anthropic.claude-opus-4-8[1m]")
+    return _ensure_1m("claude-opus-4-8")
+
+
+# USD per million tokens: (input, output). Cache write bills at 1.25x input,
+# cache read at 0.1x input. This app runs Opus by default; the tier is inferred
+# from the resolved model id so the estimate tracks whatever model is configured.
+_TIER_PRICING_PER_MTOK = {
+    "opus": (5.0, 25.0),
+    "fable": (10.0, 50.0),
+    "sonnet": (3.0, 15.0),
+    "haiku": (1.0, 5.0),
+}
+
+
+def _price_tier(model: str) -> str:
+    m = (model or "").lower()
+    for tier in ("opus", "fable", "sonnet", "haiku"):
+        if tier in m:
+            return tier
+    return "opus"  # this app's default model family
+
+
+class _CostTracker:
+    """Running cost estimate for one CLI invocation.
+
+    stream-json ``assistant`` events carry ``message.usage``; the same message id
+    can reappear across events with growing usage, so usage is stored per id
+    (latest snapshot wins) and summed — never double-counted. The final ``result``
+    event's ``total_cost_usd`` replaces the estimate with the CLI's exact figure."""
+
+    def __init__(self, model: str):
+        in_mtok, out_mtok = _TIER_PRICING_PER_MTOK[_price_tier(model)]
+        self._in = in_mtok / 1_000_000
+        self._out = out_mtok / 1_000_000
+        self._usage_by_msg: dict[str, dict] = {}
+        self.total_usd = 0.0
+
+    def add_usage(self, msg_id: str, usage: dict) -> None:
+        self._usage_by_msg[msg_id] = usage
+        total = 0.0
+        for u in self._usage_by_msg.values():
+            # `... or 0` guards against an explicit null in the stream (get's
+            # default only covers a missing key, not a present-but-None value).
+            total += (u.get("input_tokens") or 0) * self._in
+            total += (u.get("output_tokens") or 0) * self._out
+            total += (u.get("cache_creation_input_tokens") or 0) * self._in * 1.25
+            total += (u.get("cache_read_input_tokens") or 0) * self._in * 0.1
+        self.total_usd = total
+
+    def set_exact(self, total_usd: float) -> None:
+        self.total_usd = total_usd
 
 
 async def stream_claude_cli(pid: str, prompt: str, first_turn: bool,
@@ -533,6 +643,7 @@ async def stream_claude_cli(pid: str, prompt: str, first_turn: bool,
     # writes more than the pipe buffer (~64KB) of warnings/progress noise.
     stderr_task = asyncio.ensure_future(proc.stderr.read())
 
+    cost = _CostTracker(model)
     streamed_text = ""  # everything the user saw streamed live
     result_text = ""    # the final `result` event (usually a duplicate of the last block)
     buf = ""
@@ -555,6 +666,11 @@ async def stream_claude_cli(pid: str, prompt: str, first_turn: bool,
                     continue
                 etype = event.get("type")
                 if etype == "assistant":
+                    msg = event.get("message", {})
+                    usage = msg.get("usage")
+                    if isinstance(usage, dict):
+                        cost.add_usage(msg.get("id", ""), usage)
+                        yield _sse("cost", f"{cost.total_usd:.4f}")
                     for block in event.get("message", {}).get("content", []):
                         if block.get("type") == "text" and block.get("text"):
                             streamed_text += block["text"]
@@ -578,6 +694,10 @@ async def stream_claude_cli(pid: str, prompt: str, first_turn: bool,
                             suffix = f" …(+{len(lines) - 1} lines)" if len(lines) > 1 else ""
                             yield _trace("result", detail=preview + suffix)
                 elif etype == "result":
+                    exact = event.get("total_cost_usd")
+                    if isinstance(exact, (int, float)) and exact > 0:
+                        cost.set_exact(float(exact))
+                        yield _sse("cost", f"{cost.total_usd:.4f}")
                     rt = event.get("result", "")
                     if rt and isinstance(rt, str):
                         result_text = rt
@@ -611,9 +731,12 @@ async def stream_claude_cli(pid: str, prompt: str, first_turn: bool,
                                       "continue; retrying fresh")
             fresh = (PREAMBLE
                      + "[Context: this resumes an existing project, but the prior "
-                       "CLI session is gone (e.g. after a server restart). Re-read "
-                       "./out/content.json for the current document state and "
-                       "./uploads/ for the author's files before responding.]\n\n"
+                       "CLI session is gone (e.g. after a server restart). Before "
+                       "responding, re-read ./out/content.json for the current "
+                       "document state, ./out/interview-log.md for the full "
+                       "conversation and the author's answers so far (don't re-ask "
+                       "what they already told you), and ./uploads/ for their "
+                       "files.]\n\n"
                      + prompt)
             async for ev in stream_claude_cli(pid, fresh, first_turn=True,
                                               _retrying=True):
@@ -778,6 +901,8 @@ async def _finish_turn(pid: str, final_text: str, first_turn: bool, demo: bool =
         _save_messages(pid, msgs)
     meta["updated"] = time.time()
     _save_meta(pid, meta)
+    # Persist a recoverable digest of the whole conversation (item 6).
+    _write_interview_log(pid)
 
     if final_text.strip() and emit_final:
         yield _sse("chunk", ("\n\n" if not final_text.startswith("\n") else "") + final_text)
@@ -794,6 +919,14 @@ async def _finish_turn(pid: str, final_text: str, first_turn: bool, demo: bool =
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
+
+# Projects with a turn in flight. A single Claude Code process per project owns
+# its dir (the CLI session, out/, content.json); a second concurrent turn would
+# race --continue and clobber files. asyncio is single-threaded, so claiming the
+# pid synchronously (no await between the check and the add) is an atomic guard
+# against a double-submit or a second browser tab.
+_active_turns: set[str] = set()
+
 
 @app.get("/api/version")
 async def version():
@@ -909,35 +1042,54 @@ async def set_mode(pid: str, request: Request):
 async def message(pid: str, request: Request):
     if not _safe_pid(pid):
         return JSONResponse({"error": "not found"}, status_code=404)
-    body = await request.json()
-    text = (body.get("text") or "").strip()
+    # Claim the project synchronously (before any await) so a double-submit or a
+    # second tab can't start a second turn racing the same CLI session / out dir.
+    if pid in _active_turns:
+        return JSONResponse(
+            {"error": "A response is already being generated for this project. "
+                      "Wait for it to finish before sending another message."},
+            status_code=409,
+        )
+    _active_turns.add(pid)
+    try:
+        body = await request.json()
+        text = (body.get("text") or "").strip()
 
-    msgs = _load_messages(pid)
-    first_turn = not any(m["role"] == "assistant" for m in msgs)
-    if text:
-        msgs.append({"role": "user", "text": text, "ts": time.time()})
-        _save_messages(pid, msgs)
+        msgs = _load_messages(pid)
+        first_turn = not any(m["role"] == "assistant" for m in msgs)
+        if text:
+            msgs.append({"role": "user", "text": text, "ts": time.time()})
+            _save_messages(pid, msgs)
 
-    meta = _load_meta(pid)
-    # NOTE: the project title is intentionally NOT set from the raw first message
-    # (that produced an ugly sentence-fragment label). It is promoted from the
-    # model's concise concept_title in _finish_turn once the document is drafted.
+        meta = _load_meta(pid)
+        # NOTE: the project title is intentionally NOT set from the raw first
+        # message (that produced an ugly sentence-fragment label). It is promoted
+        # from the model's concise concept_title in _finish_turn once drafted.
 
-    _ensure_skill_symlink(pid)
+        _ensure_skill_symlink(pid)
+    except BaseException:
+        # BaseException, not Exception: a client disconnect during `await
+        # request.json()` raises asyncio.CancelledError (a BaseException), which
+        # would otherwise skip the release and lock the project permanently.
+        _active_turns.discard(pid)  # release if setup failed before streaming
+        raise
 
     async def generate():
-        yield _sse("project", json.dumps(_project_summary(pid)))
-        if get_claude_bin():
-            mode = meta.get("mode", "brief")
-            uploads = _uploads(pid)
-            ctx = (f"[Project mode: {mode}. Uploaded files: {', '.join(uploads) or 'none'}.]\n\n"
-                   f"{text}")
-            prompt = (PREAMBLE + ctx) if first_turn else ctx
-            async for ev in stream_claude_cli(pid, prompt, first_turn):
-                yield ev
-        else:
-            async for ev in stream_demo(pid, text, first_turn):
-                yield ev
+        try:
+            yield _sse("project", json.dumps(_project_summary(pid)))
+            if get_claude_bin():
+                mode = meta.get("mode", "brief")
+                uploads = _uploads(pid)
+                ctx = (f"[Project mode: {mode}. Uploaded files: {', '.join(uploads) or 'none'}.]\n\n"
+                       f"{text}")
+                prompt = (PREAMBLE + ctx) if first_turn else ctx
+                async for ev in stream_claude_cli(pid, prompt, first_turn):
+                    yield ev
+            else:
+                async for ev in stream_demo(pid, text, first_turn):
+                    yield ev
+        finally:
+            _active_turns.discard(pid)  # release when the stream ends or is cancelled
 
     return StreamingResponse(generate(), media_type="text/event-stream")
 
