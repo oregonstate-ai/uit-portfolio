@@ -71,6 +71,20 @@ def test_resolve_model_first_party_short_alias(app_mod, monkeypatch):
     assert app_mod.resolve_model() == "claude-fable-5[1m]"
 
 
+def test_resolve_model_opus_family_switch(app_mod, monkeypatch):
+    """The per-project downgrade switch resolves through ANTHROPIC_DEFAULT_OPUS_MODEL."""
+    monkeypatch.delenv("UIT_CLAUDE_MODEL", raising=False)
+    monkeypatch.delenv("ANTHROPIC_MODEL", raising=False)
+    monkeypatch.setenv("CLAUDE_CODE_USE_BEDROCK", "1")
+    monkeypatch.setenv("ANTHROPIC_DEFAULT_FABLE_MODEL", "global.anthropic.claude-fable-5")
+    monkeypatch.setenv("ANTHROPIC_DEFAULT_OPUS_MODEL", "global.anthropic.claude-opus-4-8")
+    assert app_mod.resolve_model("opus") == "global.anthropic.claude-opus-4-8[1m]"
+    assert app_mod.resolve_model("fable") == "global.anthropic.claude-fable-5[1m]"
+    # First-party fallbacks per family
+    monkeypatch.delenv("CLAUDE_CODE_USE_BEDROCK", raising=False)
+    assert app_mod.resolve_model("opus") == "claude-opus-4-8[1m]"
+
+
 def test_resolve_model_pins_1m_for_fable_and_opus(app_mod, monkeypatch):
     monkeypatch.delenv("CLAUDE_CODE_USE_BEDROCK", raising=False)
     monkeypatch.setenv("UIT_CLAUDE_MODEL", "claude-fable-5")
@@ -185,6 +199,20 @@ def test_create_project_defaults(client):
     assert p["title"] == "New Concept Brief"
     assert p["version"] == 0
     assert p["has_doc"] is False
+    assert p["model_family"] == "fable"  # app default; topbar switch can drop to opus
+
+
+def test_set_model_family_route(client):
+    pid = client.post("/api/projects", json={"mode": "brief"}).json()["id"]
+    p = client.post(f"/api/projects/{pid}/model", json={"family": "opus"}).json()
+    assert p["model_family"] == "opus"
+    # Persisted — a fresh summary reflects it.
+    assert client.get(f"/api/projects/{pid}").json()["model_family"] == "opus"
+    # Back to the default, and bad input is rejected.
+    p = client.post(f"/api/projects/{pid}/model", json={"family": "fable"}).json()
+    assert p["model_family"] == "fable"
+    r = client.post(f"/api/projects/{pid}/model", json={"family": "haiku"})
+    assert r.status_code == 400
 
 
 def _run_turn(client, pid, text):

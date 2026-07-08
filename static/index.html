@@ -114,6 +114,11 @@ body{font-family:var(--font-body);color:var(--ink);background:var(--paper);-webk
 /* live cost pill — running $ estimate of the analysis, next to the status */
 .cost-pill{display:inline-flex;align-items:center;font-family:var(--font-mono);font-size:.72rem;font-weight:500;font-variant-numeric:tabular-nums;padding:3px 9px;border-radius:20px;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink-soft);transition:.2s}
 .cost-pill.live{border-color:var(--orange-line);background:var(--orange-tint);color:var(--orange-deep)}
+/* tiny per-project model switch, left of the cost pill — Fable (default) / Opus (cheaper) */
+.model-switch{display:inline-flex;align-items:center;border:1px solid var(--line-strong);border-radius:20px;background:var(--surface);overflow:hidden}
+.model-switch button{border:0;background:none;cursor:pointer;font:inherit;font-size:.62rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;padding:3px 8px;color:var(--ink-faint);transition:.15s}
+.model-switch button.on{background:var(--orange-tint);color:var(--orange-deep)}
+.model-switch button:not(.on):hover{color:var(--ink-soft)}
 .dotlive{width:7px;height:7px;border-radius:50%;background:var(--pine);box-shadow:0 0 0 3px rgba(63,107,58,.18);animation:pulse 2s infinite}
 .dotlive.demo{background:var(--gold);box-shadow:0 0 0 3px rgba(201,138,26,.18)}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
@@ -374,7 +379,7 @@ body{font-family:var(--font-body);color:var(--ink);background:var(--paper);-webk
         <span class="arrow">→</span>
         <div class="ms" id="ms-charter"><span class="d">2</span> Charter</div>
       </div>
-      <div class="status"><span class="cost-pill" id="costpill" style="display:none"></span><span class="dotlive" id="livedot"></span> <span id="statusline">Working in the official template</span></div>
+      <div class="status"><span class="model-switch" id="modelswitch" style="display:none" title="Model for this project — Fable is the default; Opus is roughly half the cost"><button id="mf-fable" type="button">Fable</button><button id="mf-opus" type="button">Opus</button></span><span class="cost-pill" id="costpill" style="display:none"></span><span class="dotlive" id="livedot"></span> <span id="statusline">Working in the official template</span></div>
     </div>
 
     <div class="progress-bar hidden" id="progress-bar"><div class="track"></div></div>
@@ -444,13 +449,36 @@ let TRACE = [];           // raw activity lines for the live console (per turn)
 let currentCost = null;   // cumulative $ for this project session (null = no data yet)
 let costBase = 0;         // cost carried from earlier turns in this session
 let MODEL_FAMILY = '';    // "Opus" / "Fable" / … — names the model in the working label
+let PROJECT_FAMILY = 'fable';  // this project's family, from the tiny topbar switch
 
 // ---------- view nav ----------
 function show(view){
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   $('#'+view).classList.add('active');
 }
-function goLanding(){ CURRENT=null; show('landing'); refreshLanding(); }
+function goLanding(){ CURRENT=null; $('#modelswitch').style.display='none'; show('landing'); refreshLanding(); }
+
+// ---------- per-project model switch (Fable default / Opus = cheaper) ----------
+function renderModelSwitch(){
+  const s = $('#modelswitch');
+  if(!CURRENT || DEMO){ s.style.display='none'; return; }
+  s.style.display='inline-flex';
+  $('#mf-fable').classList.toggle('on', PROJECT_FAMILY !== 'opus');
+  $('#mf-opus').classList.toggle('on', PROJECT_FAMILY === 'opus');
+}
+async function setModelFamily(f){
+  if(!CURRENT || f === PROJECT_FAMILY) return;
+  try{
+    const p = await api('/api/projects/'+CURRENT+'/model', {method:'POST',
+      headers:{'Content-Type':'application/json'}, body: JSON.stringify({family:f})});
+    if(p.error) throw new Error(p.error);
+    PROJECT_FAMILY = p.model_family || f;
+    MODEL_FAMILY = PROJECT_FAMILY === 'opus' ? 'Opus' : 'Fable';
+    renderModelSwitch();
+  }catch(e){ showToast('Could not switch model: '+e.message); renderModelSwitch(); }
+}
+$('#mf-fable').onclick = ()=>setModelFamily('fable');
+$('#mf-opus').onclick  = ()=>setModelFamily('opus');
 function goRecent(){ const r=$('#recent'); if(r.style.display!=='none') r.scrollIntoView({behavior:'smooth'}); }
 function scrollToCards(){ $('#cards').scrollIntoView({behavior:'smooth'}); }
 
@@ -503,6 +531,9 @@ async function openProject(id){
   const p = await api('/api/projects/'+id);
   MODE = p.mode;
   setMode(MODE);
+  PROJECT_FAMILY = p.model_family || 'fable';
+  MODEL_FAMILY = PROJECT_FAMILY === 'opus' ? 'Opus' : 'Fable';
+  renderModelSwitch();
   $('#thread').innerHTML='';
   (p.messages||[]).forEach(m=> m.role==='user'?addMe(m.text):addBot(m.text));
   if(!(p.messages||[]).length) addBot(GREETING[MODE] || GREETING.brief);

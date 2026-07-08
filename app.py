@@ -429,6 +429,7 @@ def _project_summary(pid: str) -> dict:
         "id": pid,
         "title": meta.get("title", "Untitled"),
         "mode": meta.get("mode", "brief"),
+        "model_family": meta.get("model_family", "fable"),
         "version": meta.get("version", 0),
         "updated": meta.get("updated", 0),
         "has_doc": doc is not None,
@@ -538,25 +539,38 @@ def _ensure_1m(model: str) -> str:
     return model
 
 
-def resolve_model() -> str:
+def resolve_model(family: str = "fable") -> str:
     """The model id to pass to `claude --model`, Bedrock-aware.
 
-    On Bedrock the identifier must be a full inference-profile id
-    (``global.anthropic.claude-fable-5``) — the first-party short alias
-    (``claude-fable-5``) is rejected with "model identifier is invalid". So:
-      1. An explicit UIT_CLAUDE_MODEL always wins.
-      2. Else, when pointed at Bedrock (CLAUDE_CODE_USE_BEDROCK), use the env's
-         ANTHROPIC_MODEL, then ANTHROPIC_DEFAULT_FABLE_MODEL (this app's default
-         family is Fable), then ANTHROPIC_DEFAULT_OPUS_MODEL — all already full
-         profile ids — falling back to the known global Fable profile.
-      3. Else (first-party API), the short alias is correct.
+    ``family`` is "fable" (this app's default) or "opus" — the per-project
+    downgrade switch in the SPA topbar. The actual id always comes from the
+    ANTHROPIC_DEFAULT_<FAMILY>_MODEL env vars (full inference-profile ids on
+    Bedrock), never a hardcoded literal in deployment config. So:
+      1. An explicit UIT_CLAUDE_MODEL always wins (escape hatch only — prefer
+         setting the family env vars instead of a literal id here).
+      2. Else, when pointed at Bedrock (CLAUDE_CODE_USE_BEDROCK):
+         - family "opus"  -> ANTHROPIC_DEFAULT_OPUS_MODEL
+         - family "fable" -> ANTHROPIC_MODEL, then ANTHROPIC_DEFAULT_FABLE_MODEL,
+           then ANTHROPIC_DEFAULT_OPUS_MODEL
+         each falling back to the known global profile for the family. (The bare
+         first-party alias is rejected by Bedrock with "model identifier is
+         invalid" — the id must be a full profile like
+         ``global.anthropic.claude-fable-5``.)
+      3. Else (first-party API), the family's short alias is correct.
     Whatever the source, the Opus/Fable families are pinned to the ``[1m]``
     (1M-token context) variant via _ensure_1m.
     """
     explicit = os.environ.get("UIT_CLAUDE_MODEL")
     if explicit:
         return _ensure_1m(explicit)
-    if os.environ.get("CLAUDE_CODE_USE_BEDROCK"):
+    fam = (family or "fable").lower()
+    on_bedrock = bool(os.environ.get("CLAUDE_CODE_USE_BEDROCK"))
+    if fam == "opus":
+        if on_bedrock:
+            return _ensure_1m(os.environ.get("ANTHROPIC_DEFAULT_OPUS_MODEL")
+                              or "global.anthropic.claude-opus-4-8[1m]")
+        return _ensure_1m("claude-opus-4-8")
+    if on_bedrock:
         return _ensure_1m(
             os.environ.get("ANTHROPIC_MODEL")
             or os.environ.get("ANTHROPIC_DEFAULT_FABLE_MODEL")
@@ -620,8 +634,9 @@ async def stream_claude_cli(pid: str, prompt: str, first_turn: bool,
     """Run the Claude CLI in the project dir, streaming humanized events."""
     claude_bin = get_claude_bin()
     proj = _pdir(pid)
-    # Fable with the 1M-token context window by default, for both turns.
-    model = resolve_model()
+    # Fable with the 1M-token context window by default; the project's topbar
+    # switch can drop it to the Opus family (cheaper) — persisted in meta.json.
+    model = resolve_model(_load_meta(pid).get("model_family", "fable"))
     effort = os.environ.get("UIT_CLAUDE_EFFORT", "high")  # low|medium|high|xhigh|max
     cmd = [claude_bin, "-p", prompt, "--model", model, "--effort", effort,
            "--output-format", "stream-json", "--verbose",
@@ -1025,6 +1040,24 @@ async def upload(pid: str, file: UploadFile = File(...)):
     return JSONResponse({"uploads": _uploads(pid), "has_comments": has_comments,
                          "is_brief": is_brief, "mode": meta.get("mode", "brief"),
                          "suggested_mode": suggested_mode})
+
+
+@app.post("/api/projects/{pid}/model")
+async def set_model_family(pid: str, request: Request):
+    """Per-project model family — the tiny topbar switch. "fable" (default) or
+    "opus" (drops to ANTHROPIC_DEFAULT_OPUS_MODEL, half the cost). Takes effect
+    on the project's next turn."""
+    if not _safe_pid(pid):
+        return JSONResponse({"error": "not found"}, status_code=404)
+    body = await request.json()
+    family = body.get("family")
+    if family not in ("fable", "opus"):
+        return JSONResponse({"error": "invalid family"}, status_code=400)
+    meta = _load_meta(pid)
+    meta["model_family"] = family
+    meta["updated"] = time.time()
+    _save_meta(pid, meta)
+    return JSONResponse(_project_summary(pid))
 
 
 @app.post("/api/projects/{pid}/mode")
