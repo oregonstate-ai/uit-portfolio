@@ -443,6 +443,7 @@ let BUSY = false;
 let TRACE = [];           // raw activity lines for the live console (per turn)
 let currentCost = null;   // cumulative $ for this project session (null = no data yet)
 let costBase = 0;         // cost carried from earlier turns in this session
+let MODEL_FAMILY = '';    // "Opus" / "Fable" / … — names the model in the working label
 
 // ---------- view nav ----------
 function show(view){
@@ -614,7 +615,7 @@ async function send(){
           </svg>
         </div>
         <div class="ap-body">
-          <div class="ap-label">Claude is working</div>
+          <div class="ap-label">${MODEL_FAMILY ? 'Claude '+esc(MODEL_FAMILY)+' is working' : 'Claude is working'}</div>
           <div class="ap-msg"></div>
           <div class="ap-dots"><span></span><span></span><span></span></div>
         </div>
@@ -702,10 +703,9 @@ function setBusy(b){
   renderCost();  // pill is orange/"live" while busy, muted when idle
 }
 
-// Coarse display so the counter doesn't flicker: 10-cent steps below $1,
-// whole-dollar steps from $1 up (as requested).
+// Coarse display so the counter doesn't flicker: 10-cent steps throughout
+// (e.g. $0.20, $1.30, $2.50), for all amounts.
 function formatCost(usd){
-  if(usd>=1) return '$'+Math.floor(usd);
   return '$'+(Math.floor(usd*10)/10).toFixed(2);
 }
 function renderCost(){
@@ -809,6 +809,7 @@ ta.addEventListener('keydown', e=>{ if(e.key==='Enter' && !e.shiftKey){ e.preven
 (async function(){
   const v = await api('/api/version');
   DEMO = v.demo;
+  MODEL_FAMILY = v.model_family || '';
   if(DEMO){ $('#livedot').classList.add('demo'); $('#statusline').textContent = 'Demo mode · scripted assistant (no backend configured)'; }
   if(v.missing_skills && v.missing_skills.length){
     $('#livedot').classList.add('demo');

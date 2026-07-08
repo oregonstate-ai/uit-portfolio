@@ -935,6 +935,9 @@ async def version():
         "demo": get_claude_bin() is None,
         "docx_skill": docx_skill_available(),
         "missing_skills": missing_skills(),
+        # Display name of the model family in use ("Opus"/"Fable"/…), so the UI
+        # can say "Claude Opus is working" rather than a generic "Claude".
+        "model_family": _price_tier(resolve_model()).title(),
         "contact": os.environ.get("CONTACT", ""),
         "coordinator": os.environ.get("PORTFOLIO_COORDINATOR", ""),
     })
