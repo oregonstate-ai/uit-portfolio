@@ -35,27 +35,40 @@ def test_resolve_model_bedrock_uses_env_profile(app_mod, monkeypatch):
     assert app_mod.resolve_model() == "global.anthropic.claude-opus-4-8[1m]"
 
 
-def test_resolve_model_bedrock_appends_1m_to_env_profile(app_mod, monkeypatch):
+def test_resolve_model_bedrock_prefers_fable_env(app_mod, monkeypatch):
     monkeypatch.delenv("UIT_CLAUDE_MODEL", raising=False)
     monkeypatch.delenv("ANTHROPIC_MODEL", raising=False)
     monkeypatch.setenv("CLAUDE_CODE_USE_BEDROCK", "1")
-    # Env profile without the suffix -> [1m] is added (Opus family supports it).
+    # Fable is this app's default family: its env profile outranks the Opus one.
+    monkeypatch.setenv("ANTHROPIC_DEFAULT_FABLE_MODEL", "global.anthropic.claude-fable-5")
+    monkeypatch.setenv("ANTHROPIC_DEFAULT_OPUS_MODEL", "global.anthropic.claude-opus-4-8")
+    assert app_mod.resolve_model() == "global.anthropic.claude-fable-5[1m]"
+
+
+def test_resolve_model_bedrock_appends_1m_to_env_profile(app_mod, monkeypatch):
+    monkeypatch.delenv("UIT_CLAUDE_MODEL", raising=False)
+    monkeypatch.delenv("ANTHROPIC_MODEL", raising=False)
+    monkeypatch.delenv("ANTHROPIC_DEFAULT_FABLE_MODEL", raising=False)
+    monkeypatch.setenv("CLAUDE_CODE_USE_BEDROCK", "1")
+    # Env profile without the suffix -> [1m] is added (Opus family supports it),
+    # and the Opus profile is still honored when no Fable profile is set.
     monkeypatch.setenv("ANTHROPIC_DEFAULT_OPUS_MODEL", "global.anthropic.claude-opus-4-8")
     assert app_mod.resolve_model() == "global.anthropic.claude-opus-4-8[1m]"
 
 
 def test_resolve_model_bedrock_hardcoded_last_resort(app_mod, monkeypatch):
-    for k in ("UIT_CLAUDE_MODEL", "ANTHROPIC_MODEL", "ANTHROPIC_DEFAULT_OPUS_MODEL"):
+    for k in ("UIT_CLAUDE_MODEL", "ANTHROPIC_MODEL",
+              "ANTHROPIC_DEFAULT_FABLE_MODEL", "ANTHROPIC_DEFAULT_OPUS_MODEL"):
         monkeypatch.delenv(k, raising=False)
     monkeypatch.setenv("CLAUDE_CODE_USE_BEDROCK", "1")
     # Must be a full inference-profile id (the bare alias is rejected by Bedrock).
-    assert app_mod.resolve_model() == "global.anthropic.claude-opus-4-8[1m]"
+    assert app_mod.resolve_model() == "global.anthropic.claude-fable-5[1m]"
 
 
 def test_resolve_model_first_party_short_alias(app_mod, monkeypatch):
     monkeypatch.delenv("UIT_CLAUDE_MODEL", raising=False)
     monkeypatch.delenv("CLAUDE_CODE_USE_BEDROCK", raising=False)
-    assert app_mod.resolve_model() == "claude-opus-4-8[1m]"
+    assert app_mod.resolve_model() == "claude-fable-5[1m]"
 
 
 def test_resolve_model_pins_1m_for_fable_and_opus(app_mod, monkeypatch):
@@ -80,7 +93,7 @@ def test_price_tier_detection(app_mod):
     assert app_mod._price_tier("global.anthropic.claude-opus-4-8[1m]") == "opus"
     assert app_mod._price_tier("claude-sonnet-5") == "sonnet"
     assert app_mod._price_tier("claude-fable-5") == "fable"
-    assert app_mod._price_tier("") == "opus"  # default family
+    assert app_mod._price_tier("") == "fable"  # default family
 
 
 def test_cost_tracker_dedupes_by_message_id(app_mod):

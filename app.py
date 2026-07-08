@@ -542,12 +542,13 @@ def resolve_model() -> str:
     """The model id to pass to `claude --model`, Bedrock-aware.
 
     On Bedrock the identifier must be a full inference-profile id
-    (``global.anthropic.claude-opus-4-8``) — the first-party short alias
-    (``claude-opus-4-8``) is rejected with "model identifier is invalid". So:
+    (``global.anthropic.claude-fable-5``) — the first-party short alias
+    (``claude-fable-5``) is rejected with "model identifier is invalid". So:
       1. An explicit UIT_CLAUDE_MODEL always wins.
       2. Else, when pointed at Bedrock (CLAUDE_CODE_USE_BEDROCK), use the env's
-         ANTHROPIC_MODEL / ANTHROPIC_DEFAULT_OPUS_MODEL (already a full profile id),
-         falling back to the known global Opus profile.
+         ANTHROPIC_MODEL, then ANTHROPIC_DEFAULT_FABLE_MODEL (this app's default
+         family is Fable), then ANTHROPIC_DEFAULT_OPUS_MODEL — all already full
+         profile ids — falling back to the known global Fable profile.
       3. Else (first-party API), the short alias is correct.
     Whatever the source, the Opus/Fable families are pinned to the ``[1m]``
     (1M-token context) variant via _ensure_1m.
@@ -558,13 +559,14 @@ def resolve_model() -> str:
     if os.environ.get("CLAUDE_CODE_USE_BEDROCK"):
         return _ensure_1m(
             os.environ.get("ANTHROPIC_MODEL")
+            or os.environ.get("ANTHROPIC_DEFAULT_FABLE_MODEL")
             or os.environ.get("ANTHROPIC_DEFAULT_OPUS_MODEL")
-            or "global.anthropic.claude-opus-4-8[1m]")
-    return _ensure_1m("claude-opus-4-8")
+            or "global.anthropic.claude-fable-5[1m]")
+    return _ensure_1m("claude-fable-5")
 
 
 # USD per million tokens: (input, output). Cache write bills at 1.25x input,
-# cache read at 0.1x input. This app runs Opus by default; the tier is inferred
+# cache read at 0.1x input. This app runs Fable by default; the tier is inferred
 # from the resolved model id so the estimate tracks whatever model is configured.
 _TIER_PRICING_PER_MTOK = {
     "opus": (5.0, 25.0),
@@ -579,7 +581,7 @@ def _price_tier(model: str) -> str:
     for tier in ("opus", "fable", "sonnet", "haiku"):
         if tier in m:
             return tier
-    return "opus"  # this app's default model family
+    return "fable"  # this app's default model family
 
 
 class _CostTracker:
@@ -618,7 +620,7 @@ async def stream_claude_cli(pid: str, prompt: str, first_turn: bool,
     """Run the Claude CLI in the project dir, streaming humanized events."""
     claude_bin = get_claude_bin()
     proj = _pdir(pid)
-    # Opus with the 1M-token context window by default, for both turns.
+    # Fable with the 1M-token context window by default, for both turns.
     model = resolve_model()
     effort = os.environ.get("UIT_CLAUDE_EFFORT", "high")  # low|medium|high|xhigh|max
     cmd = [claude_bin, "-p", prompt, "--model", model, "--effort", effort,
