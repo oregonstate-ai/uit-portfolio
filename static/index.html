@@ -29,6 +29,7 @@ body{font-family:var(--font-body);color:var(--ink);background:var(--paper);-webk
 .grain{position:fixed;inset:0;z-index:9999;pointer-events:none;opacity:.5;mix-blend-mode:multiply;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.045'/%3E%3C/svg%3E")}
 .kicker{font-family:var(--font-mono);font-size:.66rem;font-weight:500;letter-spacing:.22em;text-transform:uppercase;color:var(--orange-deep)}
+.build-tag{position:fixed;top:8px;right:12px;z-index:120;font-family:var(--font-mono);font-size:.6rem;color:var(--ink-faint);opacity:.55;pointer-events:none;letter-spacing:.02em;user-select:none}
 .view{display:none;height:100%}
 .view.active{display:flex}
 #landing.active{display:block;overflow:auto;width:100%}
@@ -251,6 +252,25 @@ body{font-family:var(--font-body);color:var(--ink);background:var(--paper);-webk
 .console-empty{color:#6e6052;text-align:center;padding:30px;font-size:.8rem}
 .console-foot{padding:8px 16px;border-top:1px solid #34291f;background:#1d1712;font-family:var(--font-mono);font-size:.64rem;color:#6e6052}
 
+/* ---- info modal ("How it works" / "Help") — light editorial theme ---- */
+.info-overlay{position:fixed;inset:0;z-index:410;display:none;align-items:center;justify-content:center;background:rgba(33,27,22,.45);backdrop-filter:blur(2px);padding:32px}
+.info-overlay.show{display:flex;animation:fade .2s both}
+.info-card{width:min(480px,100%);max-height:82vh;overflow:auto;background:var(--surface);border-radius:var(--radius-lg);box-shadow:var(--shadow-md);animation:rise .25s both}
+.info-head{display:flex;align-items:center;justify-content:space-between;padding:20px 22px 14px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--surface)}
+.info-head h2{font-family:var(--font-display);font-weight:600;font-size:1.3rem;margin:0;letter-spacing:-.01em}
+.info-close{border:0;background:transparent;color:var(--ink-faint);cursor:pointer;font-size:1.15rem;line-height:1;padding:5px 9px;border-radius:7px;transition:.15s}
+.info-close:hover{color:var(--ink);background:var(--paper-deep)}
+.info-body{padding:6px 22px 26px;font-size:.9rem;color:var(--ink-soft);line-height:1.6}
+.info-body h3{font-family:var(--font-mono);font-size:.62rem;letter-spacing:.13em;text-transform:uppercase;color:var(--orange-deep);margin:18px 0 8px}
+.info-body h3:first-child{margin-top:16px}
+.info-body p{margin:0 0 10px}
+.info-steps{display:flex;flex-direction:column;gap:12px;margin:6px 0 2px}
+.info-step{display:flex;gap:12px;align-items:flex-start}
+.info-step .n{flex:none;width:23px;height:23px;margin-top:1px;border-radius:50%;background:var(--orange);color:#fff;font-family:var(--font-mono);font-size:.7rem;font-weight:500;display:grid;place-items:center}
+.info-step b{color:var(--ink);font-weight:600}
+.info-contact{margin-top:4px;padding:12px 14px;background:var(--paper-deep);border-radius:10px;font-size:.85rem;color:var(--ink)}
+.info-contact a{color:var(--orange-deep);font-weight:600;text-decoration:none}
+
 .composer{border-top:1px solid var(--line);background:var(--surface-2);padding:14px 26px 18px}
 .composer .wrap{max-width:680px;margin:0 auto}
 .dropzone{border:1.5px dashed var(--line-strong);border-radius:10px;padding:9px 13px;margin-bottom:10px;display:flex;align-items:center;gap:10px;font-size:.8rem;color:var(--ink-soft);cursor:pointer;transition:.15s;background:var(--surface)}
@@ -273,6 +293,7 @@ body{font-family:var(--font-body);color:var(--ink);background:var(--paper);-webk
 .doctool .dt-l{display:flex;align-items:center;gap:10px;min-width:0}
 .doctool .vtag{font-family:var(--font-mono);font-size:.66rem;background:var(--ink);color:#fff;padding:3px 8px;border-radius:6px;letter-spacing:.05em}
 .doctool .dt-name{font-size:.82rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.doctool .dt-build{font-family:var(--font-mono);font-size:.6rem;color:var(--ink-faint);opacity:.6;white-space:nowrap;flex:none}
 .dlbtn{display:flex;align-items:center;gap:7px;font-family:var(--font-body);font-weight:600;font-size:.8rem;border:1px solid var(--orange-line);color:var(--orange-deep);background:var(--orange-tint);cursor:pointer;padding:7px 13px;border-radius:8px;transition:.15s;text-decoration:none;white-space:nowrap}
 .dlbtn:hover{background:var(--orange);color:#fff;border-color:var(--orange)}
 .dlbtn.disabled{opacity:.4;pointer-events:none}
@@ -315,13 +336,14 @@ body{font-family:var(--font-body);color:var(--ink);background:var(--paper);-webk
 </head>
 <body>
 <div class="grain"></div>
+<div class="build-tag" id="buildtag"></div>
 
 <!-- ===================== LANDING ===================== -->
 <section id="landing" class="view">
   <div class="beaver-bar"></div>
   <header class="land-head">
     <div class="brand"><div class="mark">P</div><div class="name">Portfolio Studio<small>OSU · University IT</small></div></div>
-    <nav><a onclick="scrollToCards()">How it works</a><a onclick="goRecent()">My projects</a><a href="#">Help</a></nav>
+    <nav><a onclick="openInfo('how')">How it works</a><a onclick="goRecent()">My projects</a><a onclick="openInfo('help')">Help</a></nav>
   </header>
   <div class="hero">
     <div class="eyebrow kicker">UIT Portfolio Management</div>
@@ -411,7 +433,7 @@ body{font-family:var(--font-body);color:var(--ink);background:var(--paper);-webk
 
   <aside class="docpane">
     <div class="doctool">
-      <div class="dt-l"><span class="vtag" id="vtag">v0</span><span class="dt-name" id="docname">Live preview</span></div>
+      <div class="dt-l"><span class="vtag" id="vtag">v0</span><span class="dt-name" id="docname">Live preview</span><span class="dt-build" id="buildtagWs"></span></div>
       <a class="dlbtn disabled" id="dlbtn">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
         Download
@@ -438,6 +460,17 @@ body{font-family:var(--font-body);color:var(--ink);background:var(--paper);-webk
   </div>
 </div>
 
+<!-- "How it works" / "Help" info modal -->
+<div class="info-overlay" id="infoModal" onclick="if(event.target===this)closeInfo()">
+  <div class="info-card">
+    <div class="info-head">
+      <h2 id="infoTitle"></h2>
+      <button class="info-close" onclick="closeInfo()" title="Close (Esc)">✕</button>
+    </div>
+    <div class="info-body" id="infoBody"></div>
+  </div>
+</div>
+
 <script>
 const $ = s => document.querySelector(s);
 const fileInput = $('#fileInput');
@@ -455,6 +488,10 @@ let PROJECT_FAMILY = 'fable';  // this project's family, from the tiny topbar sw
 function show(view){
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   $('#'+view).classList.add('active');
+  // The fixed top-right build tag only belongs on landing — in the workspace
+  // that corner is the Download button, so the commit shows inline in the
+  // doctool bar instead (#buildtagWs) rather than overlapping it.
+  $('#buildtag').style.display = view==='workspace' ? 'none' : '';
 }
 function goLanding(){ CURRENT=null; $('#modelswitch').style.display='none'; show('landing'); refreshLanding(); }
 
@@ -480,7 +517,39 @@ async function setModelFamily(f){
 $('#mf-fable').onclick = ()=>setModelFamily('fable');
 $('#mf-opus').onclick  = ()=>setModelFamily('opus');
 function goRecent(){ const r=$('#recent'); if(r.style.display!=='none') r.scrollIntoView({behavior:'smooth'}); }
-function scrollToCards(){ $('#cards').scrollIntoView({behavior:'smooth'}); }
+
+// ---------- "How it works" / "Help" info modal ----------
+let HELP_CONTACT = '', HELP_COORDINATOR = '';
+function openInfo(kind){
+  const titleEl = $('#infoTitle'), bodyEl = $('#infoBody');
+  if(kind==='how'){
+    titleEl.textContent = 'How it works';
+    bodyEl.innerHTML = `
+      <p>You chat with an assistant that interviews you, drafts into the official OSU template as you go, and flags exactly what a reviewer would ask — nothing is invented; anything unclear becomes a placeholder you can resolve later.</p>
+      <div class="info-steps">
+        <div class="info-step"><span class="n">1</span><div><b>Concept Brief</b> — a quick, directional intake. A handful of questions about the problem, outcomes, and strategic fit, answered at your own pace.</div></div>
+        <div class="info-step"><span class="n">2</span><div><b>Business Case / ROI</b> <span style="color:var(--ink-faint)">— sometimes required first.</span> Reviewers may ask for this before a charter if cost or value is still unclear.</div></div>
+        <div class="info-step"><span class="n">3</span><div><b>Project Charter</b> — once your brief comes back from review with comments, upload it here and every comment gets carried into the charter.</div></div>
+      </div>`;
+  } else {
+    titleEl.textContent = 'Help';
+    let html = `
+      <p>UIT Portfolio Studio helps you turn a rough idea — or a brief returned from review — into the official Concept/Idea Brief or Project Charter, by interviewing you and drafting the document as you go.</p>
+      <h3>Using it</h3>
+      <p>Reply to a batch of questions by number — e.g. "1. next quarter&nbsp;&nbsp;2. ~5 colleges&nbsp;&nbsp;3. not sure" — answer only the ones you can. Download the current draft anytime, even mid-conversation; anything you're unsure of becomes a placeholder rather than a guess.</p>
+      <h3>Questions about the process</h3>
+      <p>For questions about funding, scope, or where a project sits in the Portfolio Management pipeline, reach out to your UIT Portfolio Management coordinator.</p>`;
+    if(HELP_COORDINATOR || HELP_CONTACT){
+      html += '<div class="info-contact">'
+        + (HELP_COORDINATOR ? esc(HELP_COORDINATOR) + '<br>' : '')
+        + (HELP_CONTACT ? esc(HELP_CONTACT) : '')
+        + '</div>';
+    }
+    bodyEl.innerHTML = html;
+  }
+  $('#infoModal').classList.add('show');
+}
+function closeInfo(){ $('#infoModal').classList.remove('show'); }
 
 // ---------- API ----------
 async function api(path, opts){ const r = await fetch(path, opts); return r.json(); }
@@ -490,23 +559,36 @@ async function refreshLanding(){
   const grid = $('#recent-grid');
   if(projects.length){
     $('#recent').style.display='block';
+    // data-id (not an inline onclick built from a template string) — a project
+    // id can never actually contain a quote (server validates it as pure hex),
+    // but this avoids the class of bug entirely rather than relying on that.
     grid.innerHTML = projects.map(p=>`
-      <div class="rec" onclick="openProject('${p.id}')">
+      <div class="rec" data-id="${p.id}">
         <div class="rt">${esc(p.title)}</div>
         <div class="rm"><span class="stage ${p.mode==='charter'?'charter':''}">${p.mode==='charter'?'Charter':'Brief · v'+p.version}</span> ${fromNow(p.updated)}</div>
       </div>`).join('');
   } else { $('#recent').style.display='none'; }
 }
+$('#recent-grid').addEventListener('click', e=>{
+  const el = e.target.closest('.rec[data-id]');
+  if(el) openProject(el.dataset.id);
+});
 
 async function refreshSidebar(){
   const projects = await api('/api/projects');
   $('#proj-list').innerHTML = projects.map(p=>`
-    <div class="proj ${p.id===CURRENT?'active':''}" onclick="openProject('${p.id}')">
-      <button class="del" title="Delete" onclick="event.stopPropagation();delProject('${p.id}')">✕</button>
+    <div class="proj ${p.id===CURRENT?'active':''}" data-id="${p.id}">
+      <button class="del" title="Delete" data-del="${p.id}">✕</button>
       <div class="pt"><span class="pin"></span>${esc(p.title)}</div>
       <div class="pm"><span class="stage ${p.mode==='charter'?'charter':''}">${p.mode==='charter'?'Charter':'Brief · v'+p.version}</span> ${fromNow(p.updated)}</div>
     </div>`).join('') || '<div style="padding:14px;color:var(--ink-faint);font-size:.8rem">No projects yet.</div>';
 }
+$('#proj-list').addEventListener('click', e=>{
+  const delBtn = e.target.closest('[data-del]');
+  if(delBtn){ delProject(delBtn.dataset.del); return; }
+  const row = e.target.closest('.proj[data-id]');
+  if(row) openProject(row.dataset.id);
+});
 
 const GREETING = {
   brief: "Great — let's draft your Concept Brief. In a sentence or two: **what do you want to do, and why does it matter?** Don't worry about polish; I'll shape it into the official template and flag anything a reviewer would ask.",
@@ -724,7 +806,7 @@ function renderConsole(){
 }
 function openConsole(){ $('#console').classList.add('show'); renderConsole(); }
 function closeConsole(){ $('#console').classList.remove('show'); }
-document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeConsole(); });
+document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ closeConsole(); closeInfo(); } });
 
 function setBusy(b){
   BUSY=b;
@@ -841,6 +923,9 @@ ta.addEventListener('keydown', e=>{ if(e.key==='Enter' && !e.shiftKey){ e.preven
   const v = await api('/api/version');
   DEMO = v.demo;
   MODEL_FAMILY = v.model_family || '';
+  HELP_CONTACT = v.contact || '';
+  HELP_COORDINATOR = v.coordinator || '';
+  if(v.commit){ $('#buildtag').textContent = v.commit; $('#buildtagWs').textContent = v.commit; }
   if(DEMO){ $('#livedot').classList.add('demo'); $('#statusline').textContent = 'Demo mode · scripted assistant (no backend configured)'; }
   if(v.missing_skills && v.missing_skills.length){
     $('#livedot').classList.add('demo');
