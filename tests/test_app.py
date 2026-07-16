@@ -315,6 +315,8 @@ def test_projects_isolated_between_sessions(client, client2, app_mod):
     assert client2.post(f"/api/projects/{pid}/message", json={"text": "hi"}).status_code == 404
     assert client2.post(f"/api/projects/{pid}/mode",
                         json={"mode": "charter"}).status_code == 404
+    assert client2.post(f"/api/projects/{pid}/model",
+                        json={"family": "opus"}).status_code == 404
 
     # A delete from the wrong session is a silent no-op — the project survives
     # and its owner can still reach it.

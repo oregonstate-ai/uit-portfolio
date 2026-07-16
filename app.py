@@ -1084,7 +1084,7 @@ async def set_model_family(pid: str, request: Request):
     """Per-project model family — the tiny topbar switch. "fable" (default) or
     "opus" (drops to ANTHROPIC_DEFAULT_OPUS_MODEL, half the cost). Takes effect
     on the project's next turn."""
-    if not _safe_pid(pid):
+    if not _accessible(pid, request.state.sid):
         return JSONResponse({"error": "not found"}, status_code=404)
     body = await request.json()
     family = body.get("family")
