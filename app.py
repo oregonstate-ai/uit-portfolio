@@ -26,6 +26,7 @@ import asyncio
 import json
 import os
 import re
+import secrets
 import shutil
 import subprocess
 import time
@@ -82,6 +83,27 @@ PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(title="UIT Portfolio Studio")
 app.mount("/static", StaticFiles(directory=str(REPO_ROOT / "static")), name="static")
+
+# Per-browser anonymous session, so one browser's projects are invisible to
+# another's if this is ever reached by more than one person (e.g. deployed on a
+# shared host instead of run locally per-user). No login: just an unguessable
+# id set as a cookie on first visit, used to tag and filter project ownership.
+SESSION_COOKIE = "uit_sid"
+SESSION_MAX_AGE = 60 * 60 * 24 * 365  # 1 year
+
+
+@app.middleware("http")
+async def _session_cookie(request: Request, call_next):
+    sid = request.cookies.get(SESSION_COOKIE)
+    request.state.sid = sid or secrets.token_hex(16)
+    response = await call_next(request)
+    if not sid:
+        # A few parallel requests can race on first page load (each seeing no
+        # cookie yet); the browser just keeps whichever Set-Cookie lands last,
+        # and no project data exists yet under any of them — harmless.
+        response.set_cookie(SESSION_COOKIE, request.state.sid, max_age=SESSION_MAX_AGE,
+                            httponly=True, samesite="lax")
+    return response
 
 try:
     _GIT_COMMIT = subprocess.check_output(
@@ -307,6 +329,20 @@ def _safe_pid(pid: str) -> bool:
 def _load_meta(pid: str) -> dict:
     f = _pdir(pid) / "meta.json"
     return json.loads(f.read_text()) if f.is_file() else {}
+
+
+def _owned_by(pid: str, sid: str) -> bool:
+    """True if the requesting browser session may see/act on this project.
+    Projects created before per-session ownership existed have no "owner" key
+    and stay visible to every session (the same permissive behavior the app
+    always had); only projects created after this feature are session-isolated."""
+    owner = _load_meta(pid).get("owner")
+    return owner is None or owner == sid
+
+
+def _accessible(pid: str, sid: str) -> bool:
+    """Combined existence + ownership check for every project-scoped route."""
+    return _safe_pid(pid) and _owned_by(pid, sid)
 
 
 def _save_meta(pid: str, meta: dict):
@@ -961,10 +997,11 @@ async def version():
 
 
 @app.get("/api/projects")
-async def list_projects():
+async def list_projects(request: Request):
+    sid = request.state.sid
     out = []
     for d in PROJECTS_DIR.iterdir():
-        if d.is_dir() and (d / "meta.json").is_file():
+        if d.is_dir() and (d / "meta.json").is_file() and _owned_by(d.name, sid):
             out.append(_project_summary(d.name))
     out.sort(key=lambda p: p["updated"], reverse=True)
     return JSONResponse(out)
@@ -982,15 +1019,15 @@ async def create_project(request: Request):
     (p / "uploads").mkdir(parents=True)
     (p / "out").mkdir(parents=True)
     _ensure_skill_symlink(pid)
-    _save_meta(pid, {"title": title, "mode": mode, "version": 0,
+    _save_meta(pid, {"title": title, "mode": mode, "version": 0, "owner": request.state.sid,
                      "created": time.time(), "updated": time.time()})
     _save_messages(pid, [])
     return JSONResponse(_project_summary(pid))
 
 
 @app.get("/api/projects/{pid}")
-async def get_project(pid: str):
-    if not _safe_pid(pid):
+async def get_project(pid: str, request: Request):
+    if not _accessible(pid, request.state.sid):
         return JSONResponse({"error": "not found"}, status_code=404)
     return JSONResponse({
         **_project_summary(pid),
@@ -1001,15 +1038,15 @@ async def get_project(pid: str):
 
 
 @app.delete("/api/projects/{pid}")
-async def delete_project(pid: str):
-    if _safe_pid(pid):
+async def delete_project(pid: str, request: Request):
+    if _accessible(pid, request.state.sid):
         shutil.rmtree(_pdir(pid), ignore_errors=True)
     return JSONResponse({"ok": True})
 
 
 @app.post("/api/projects/{pid}/upload")
-async def upload(pid: str, file: UploadFile = File(...)):
-    if not _safe_pid(pid):
+async def upload(pid: str, request: Request, file: UploadFile = File(...)):
+    if not _accessible(pid, request.state.sid):
         return JSONResponse({"error": "not found"}, status_code=404)
     safe_name = Path(file.filename or "upload").name
     dest = _pdir(pid) / "uploads" / safe_name
@@ -1063,7 +1100,7 @@ async def set_model_family(pid: str, request: Request):
 @app.post("/api/projects/{pid}/mode")
 async def set_mode(pid: str, request: Request):
     """Change a project's mode — only ever called from an explicit user choice."""
-    if not _safe_pid(pid):
+    if not _accessible(pid, request.state.sid):
         return JSONResponse({"error": "not found"}, status_code=404)
     body = await request.json()
     mode = body.get("mode")
@@ -1078,7 +1115,7 @@ async def set_mode(pid: str, request: Request):
 
 @app.post("/api/projects/{pid}/message")
 async def message(pid: str, request: Request):
-    if not _safe_pid(pid):
+    if not _accessible(pid, request.state.sid):
         return JSONResponse({"error": "not found"}, status_code=404)
     # Claim the project synchronously (before any await) so a double-submit or a
     # second tab can't start a second turn racing the same CLI session / out dir.
@@ -1133,15 +1170,15 @@ async def message(pid: str, request: Request):
 
 
 @app.get("/api/projects/{pid}/preview")
-async def preview(pid: str):
-    if not _safe_pid(pid):
+async def preview(pid: str, request: Request):
+    if not _accessible(pid, request.state.sid):
         return JSONResponse({"error": "not found"}, status_code=404)
     return JSONResponse(build_preview(pid))
 
 
 @app.get("/api/projects/{pid}/download/{name}")
-async def download(pid: str, name: str):
-    if not _safe_pid(pid):
+async def download(pid: str, name: str, request: Request):
+    if not _accessible(pid, request.state.sid):
         return JSONResponse({"error": "not found"}, status_code=404)
     safe = Path(name).name
     f = _pdir(pid) / "out" / safe

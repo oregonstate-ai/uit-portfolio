@@ -27,6 +27,13 @@ def client():
 
 
 @pytest.fixture
+def client2():
+    """A second browser — its own cookie jar, so its own session id. Used to
+    verify one browser's projects are invisible to another's."""
+    return TestClient(app_module.app)
+
+
+@pytest.fixture
 def app_mod():
     return app_module
 

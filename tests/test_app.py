@@ -300,6 +300,57 @@ def test_message_unknown_project_404(client):
     assert r.status_code == 404
 
 
+# --------------------------------------------------------------------------
+# Per-browser session isolation
+# --------------------------------------------------------------------------
+
+def test_projects_isolated_between_sessions(client, client2, app_mod):
+    pid = client.post("/api/projects", json={"mode": "brief"}).json()["id"]
+
+    # client2 is a different browser (different session cookie) — it must not
+    # see the project in its list, nor be able to fetch/act on it directly.
+    assert pid not in [p["id"] for p in client2.get("/api/projects").json()]
+    assert client2.get(f"/api/projects/{pid}").status_code == 404
+    assert client2.get(f"/api/projects/{pid}/preview").status_code == 404
+    assert client2.post(f"/api/projects/{pid}/message", json={"text": "hi"}).status_code == 404
+    assert client2.post(f"/api/projects/{pid}/mode",
+                        json={"mode": "charter"}).status_code == 404
+
+    # A delete from the wrong session is a silent no-op — the project survives
+    # and its owner can still reach it.
+    client2.delete(f"/api/projects/{pid}")
+    assert client.get(f"/api/projects/{pid}").status_code == 200
+
+    # The owning session sees and can use it normally.
+    assert pid in [p["id"] for p in client.get("/api/projects").json()]
+    assert client.get(f"/api/projects/{pid}").status_code == 200
+
+
+def test_download_respects_ownership(client, client2, app_mod):
+    pid = client.post("/api/projects", json={"mode": "brief"}).json()["id"]
+    events = _run_turn(client, pid, "Digital signage consolidation.")
+    doc_event = next(json.loads(d) for e, d in events if e == "doc")
+    # The owner can download; a different session hitting the same URL cannot,
+    # even though it knows the exact project id and filename.
+    assert client.get(doc_event["url"]).status_code == 200
+    assert client2.get(doc_event["url"]).status_code == 404
+
+
+def test_legacy_project_without_owner_visible_to_every_session(client, client2, app_mod):
+    # Simulate a project created before per-session ownership existed (no
+    # "owner" key in meta.json) — it must stay visible to every session, same
+    # as the app's behavior before this feature, so nothing already on disk
+    # becomes inaccessible.
+    pid = client.post("/api/projects", json={"mode": "brief"}).json()["id"]
+    meta = app_mod._load_meta(pid)
+    del meta["owner"]
+    app_mod._save_meta(pid, meta)
+
+    assert pid in [p["id"] for p in client.get("/api/projects").json()]
+    assert pid in [p["id"] for p in client2.get("/api/projects").json()]
+    assert client2.get(f"/api/projects/{pid}").status_code == 200
+
+
 def test_upload_detects_brief_without_switching_mode(client, app_mod, tmp_path):
     pid = client.post("/api/projects", json={"mode": "brief"}).json()["id"]
     d = docx.Document()
